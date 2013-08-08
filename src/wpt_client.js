@@ -89,7 +89,8 @@ function Job(client, task) {
   this.task = task;
   this.id = task[JOB_TEST_ID];
   if ('string' !== typeof this.id || !this.id) {
-    throw new Error('Task has invalid/missing id: ' + JSON.stringify(task));
+    this.id = 'test_id';
+    //throw new Error('Task has invalid/missing id: ' + JSON.stringify(task));
   }
   this.captureVideo = (1 === task[JOB_CAPTURE_VIDEO]);
   var runs = task[JOB_RUNS];
@@ -217,7 +218,7 @@ function Client(args) {
     urlPath += '/';
   }
   if (!urlPath) {
-    throw new Error('Invalid serverUrl: ' + args.serverUrl);
+   // throw new Error('Invalid serverUrl: ' + args.serverUrl);
   }
   this.baseUrl_.path = urlPath;
   this.baseUrl_.pathname = urlPath;
@@ -279,6 +280,97 @@ Client.prototype.onUncaughtException_ = function(e) {
  */
 Client.prototype.requestNextJob_ = function() {
   'use strict';
+
+  var task = {
+    //"url": "http://www.google.com",
+    "url":"",
+    "domElement": "",
+    "login": "",
+    "password": "",
+    "runs": 1,
+    "fvonly": 0,
+    "connections": 0,
+    "private": 0,
+    "web10": 0,
+    "ignoreSSL": 0,
+    "script": "driver = new webdriver.Builder().build();driver.get('http://www.google.com'); driver.wait(function()  { return driver.getTitle();});",
+    "block": null,
+    "notify": "",
+    "video": null,
+    "label": "",
+    "industry": "",
+    "industry_page": "",
+    "median_video": 0,
+    "ip": "173.194.99.20",
+    "uid": null,
+    "user": null,
+    "priority": 5,
+    "bwIn": 0,
+    "bwOut": 0,
+    "latency": 50,
+    "testLatency": 50,
+    "plr": 0,
+    "callback": null,
+    "agent": null,
+    "aftEarlyCutoff": 0,
+    "aftMinChanges": 0,
+    "tcpdump": 0,
+    "timeline": 0,
+    "trace": 0,
+    "standards": 0,
+    "netlog": 0,
+    "spdy3": 0,
+    "noscript": 0,
+    "blockads": 0,
+    "sensitive": 0,
+    "type": "",
+    "noopt": "",
+    "noimages": "",
+    "noheaders": 0,
+    "view": "",
+    "discard": 0,
+    "queue_limit": 0,
+    "pngss": 0,
+    "iq": 0,
+    "bodies": 0,
+    "time": 0,
+    "clear_rv": 0,
+    "keepua": 0,
+    "benchmark": null,
+    "max_retries": 0,
+    "pss_advanced": 0,
+    "shard_test": 0,
+    "mobile": 0,
+    "clearcerts": 0,
+    "orientation": "default",
+    "location": "Test",
+    "batch": 0,
+    "vd": null,
+    "vh": null,
+    "owner": "e9aa2f56715c098af6d8442b5cdeb260966d6eaf",
+    "key": null,
+    "aft": 0,
+    "locationText": "Test Location - <b>Cable</b>",
+    "workdir": "./work/jobs/Test",
+    "remoteUrl": null,
+    "remoteLocation": null,
+    "connectivity": "Cable",
+    "path": "./results/13/08/01/01/1PT",
+    "job": "130801_01_1PT.p5",
+    "job_file": "/home/dashboard/wpt/www/webpagetest/work/jobs/Test/130801_01_1PT.p5",
+    "tester": "127.0.0.1",
+    "started": 1375368024,
+    "id": "130801_01_1PT",
+    "last_updated": 1375368044,
+ //   "completed": 1375368044,
+    "medianRun": 1
+  };
+
+  var job = new Job(this, task);
+  logger.info('Got job: %j', job);
+  this.startNextRun_(job);
+
+  /*
   var getWorkUrl = url.resolve(this.baseUrl_,
       GET_WORK_SERVLET +
           '?location=' + encodeURIComponent(this.location_) +
@@ -305,7 +397,8 @@ Client.prototype.requestNextJob_ = function() {
   request.on('error', function(e) {
     logger.warn('Got error: ' + e.message);
     this.emit('nojob');
-  }.bind(this));
+  }.bind(this)); 
+  */ 
 };
 
 /**
@@ -384,11 +477,12 @@ Client.prototype.finishRun_ = function(job, isRunFinished) {
   logger.alert('Finished run %s/%s (isRunFinished=%s) of job %s',
       job.runNumber, job.runs, isRunFinished, job.id);
   // Expected finish of the current job
-  if (this.currentJob_ === job) {
+  if (true || this.currentJob_ === job) {
     global.clearTimeout(this.timeoutTimer_);
     this.timeoutTimer_ = undefined;
     this.currentJob_ = undefined;
     this.submitResult_(job, isRunFinished, function() {
+      return;
       this.handlingUncaughtException_ = undefined;
       // Run until we finish the last iteration.
       // Do not increment job.runNumber past job.runs.
@@ -414,6 +508,24 @@ function createZip(zipFileMap, fileNamePrefix) {
   var zip = new Zip();
   Object.getOwnPropertyNames(zipFileMap).forEach(function(fileName) {
     var content = zipFileMap[fileName];
+
+
+    var body = content;
+    var bodyBuffer = (body instanceof Buffer ? body : new Buffer(body));
+     fs.mkdir('results/', parseInt('0755', 8), function(e) {
+        if (!e || 'EEXIST' === e.code) {
+          var subdir = 'results/tmp/';
+          fs.mkdir(subdir, parseInt('0755', 8), function(e) {
+            if (!e || 'EEXIST' === e.code) {
+              fs.writeFile(subdir + fileName, bodyBuffer);
+            }
+          });
+        }
+      });
+
+
+
+
     logger.debug('Adding %s%s (%d bytes) to results zip',
         fileNamePrefix, fileName, content.length);
     zip.file(fileNamePrefix + fileName, content);
@@ -490,7 +602,8 @@ Client.prototype.postResultFile_ = function(job, resultFile, fields, callback) {
       method: 'POST',
       host: this.baseUrl_.hostname,
       port: this.baseUrl_.port,
-      path: path.join(this.baseUrl_.path, servlet),
+      path: '/hello',
+      //path: path.join(this.baseUrl_.path, servlet),
       headers: mpResponse.headers
     };
   var request = http.request(options, function(res) {

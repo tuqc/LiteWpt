@@ -169,6 +169,7 @@ Agent.prototype.scheduleProcessDone_ = function(ipcMsg, job) {
 Agent.prototype.startJobRun_ = function(job) {
   'use strict';
   job.isCacheWarm = !!this.wdServer_;
+//  job.isCacheWarm = false;
   logger.info('Running job %s run %d/%d cacheWarm=%s',
       job.id, job.runNumber, job.runs, job.isCacheWarm);
   if (!this.wdServer_) {

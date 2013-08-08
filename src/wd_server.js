@@ -237,6 +237,7 @@ WebDriverServer.prototype.connectDevTools_ = function(wdNamespace) {
   this.app_.scheduleWait('Connect DevTools to ' + wdNamespace,
       function() {
     var connected = new webdriver.promise.Deferred();
+    logger.info('Devtools url: ' + this.browser_.getDevToolsUrl());
     var devTools = new devtools.DevTools(this.browser_.getDevToolsUrl());
     devTools.connect(function() {
       this.devTools_ = devTools;
