@@ -40,7 +40,7 @@ function parseFromMessages(messages) {
     }
   }
 
-  var pageIndex = 0;  
+  var pageIndex = 0;
   for (var i in messages) {
     var message = messages[i];
     var curPage = pages[pageIndex];
@@ -344,14 +344,11 @@ Page.prototype.getHAR = function () {
         'cache': {},
         'timings': {
           'blocked': blocked,
-          //'dns': timing.dnsStart == -1 ? -1 : dns, // -1 = n.a.
           'dns': dns,
-          //'connect': timing.connectStart == -1 ? -1 : connect, // -1 = n.a.
           'connect': connect, // -1 = n.a.
           'send': send,
           'wait': wait,
           'receive': receive,
-          //'ssl': timing.sslStart == -1 ? -1 : ssl, // -1 = n.a.  
           'ssl': ssl,
         },
         '_ttfb_ms': ttfb,

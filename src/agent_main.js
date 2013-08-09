@@ -27,12 +27,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
 var child_process = require('child_process');
+var express = require('express');
 var fs = require('fs');
+var har = require('har');
 var logger = require('logger');
 var nopt = require('nopt');
 var process_utils = require('process_utils');
 var system_commands = require('system_commands');
 var traffic_shaper = require('traffic_shaper');
+var util = require('util');
 var webdriver = require('webdriver');
 var wpt_client = require('wpt_client');
 
@@ -50,10 +53,16 @@ var knownOpts = {
   deviceAddr: [String, null],
   deviceSerial: [String, null],
   jobTimeout: [Number, null],
-  apiKey: [String, null]
+  apiKey: [String, null],
+  port: [Number, null],
+  resultDir: [String, null],
 };
 
 var WD_SERVER_EXIT_TIMEOUT = 5000;  // Wait for 5 seconds before force-killing
+var WD_SCRIPT_TEMPLATE = " \
+    driver = new webdriver.Builder().build(); \
+    driver.get('%s'); \
+    driver.wait(function()  { return driver.getTitle();});";
 
 /**
  * @param {wpt_client.Client} client the WebPagetest client.
@@ -64,6 +73,8 @@ function Agent(client, flags) {
   'use strict';
   this.client_ = client;
   this.flags_ = flags;
+  this.httpServer = express();
+  this.httpPort = flags.port ? flags.port : 8888;
   this.app_ = webdriver.promise.Application.getInstance();
   process_utils.injectWdAppLogging('main app', this.app_);
   this.wdServer_ = undefined;  // The wd_server child process.
@@ -80,8 +91,66 @@ exports.Agent = Agent;
  */
 Agent.prototype.run = function() {
   'use strict';
-  this.client_.run(/*forever=*/true);
+
+  // Http paths
+  this.httpServer.use(express.bodyParser());
+  this.httpServer.get('/task/submit', this.submitTask.bind(this));
+  this.httpServer.post('/task/submit', this.submitTask.bind(this));
+  this.httpServer.get('/task/check/:tid', this.checkTask.bind(this));
+  this.httpServer.get('/healthz', this.healthz.bind(this));
+  this.httpServer.get('/varz', this.varz.bind(this));
+
+  console.log('Start HTTP server with port=' + this.httpPort);
+  this.httpServer.listen(this.httpPort);
 };
+
+Agent.prototype.healthz = function(req, res) {
+  res.send('ok');
+}
+
+Agent.prototype.varz = function(req, res) {
+  res.send('ok');
+}
+
+/**
+ * Typicall task contain following fields
+ * var task = {
+ *   "url":"",
+ *   "runs": 1,
+ *   "fvonly": 0,
+ *   "script":"driver = new
+ *      webdriver.Builder().build();driver.get('http://www.baidu.com');
+ *      driver.wait(function()  { return driver.getTitle();});", };
+ */
+Agent.prototype.submitTask = function(req, res) {
+  'use strict';
+  var task = req.body;
+  if ('url' in req.query) {
+    task['url'] = req.query.url;
+  }
+
+  if (!task.script) {
+    if (task.url) {
+      task.script = util.format(WD_SCRIPT_TEMPLATE, task.url);
+    } else {
+      res.send('error.');
+      return
+    }
+  }
+
+  if (!task.runs) task.runs = 1;
+  if (!task.fvonly) task.fvonly = 1;
+
+  this.client_.runTask(task);
+  res.send(JSON.stringify(req.body) + '---' + JSON.stringify(req.params) + '---' + JSON.stringify(req.query)) ;
+}
+
+Agent.prototype.checkTask = function(req, res) {
+  'use strict';
+   res.send(req.params.tid);
+   res.send('ok.');
+}
+
 
 /**
  * @param {string=} description debug title.
@@ -120,8 +189,18 @@ Agent.prototype.scheduleProcessDone_ = function(ipcMsg, job) {
   'use strict';
   this.scheduleNoFault_('Process job results', function() {
     if (ipcMsg.devToolsMessages) {
-      job.zipResultFiles['devtools.json'] =
-          JSON.stringify(ipcMsg.devToolsMessages);
+//      job.zipResultFiles['devtools.json'] =
+//          JSON.stringify(ipcMsg.devToolsMessages);
+      var devMessage = JSON.stringify(ipcMsg.devToolsMessages);
+      job.resultFiles.push(
+          new wpt_client.ResultFile(
+              wpt_client.ResultFile.ContentType.JSON,
+              'devtools.json', devMessage));
+      var harJson = har.parseFromText(devMessage);
+      job.resultFiles.push(
+          new wpt_client.ResultFile(
+              wpt_client.ResultFile.ContentType.JSON,
+              'har.json', JSON.stringify(harJson)));
     }
     if (ipcMsg.screenshots && ipcMsg.screenshots.length > 0) {
       var imageDescriptors = [];
@@ -129,9 +208,8 @@ Agent.prototype.scheduleProcessDone_ = function(ipcMsg, job) {
         logger.debug('Adding screenshot %s', screenshot.fileName);
         var contentBuffer = new Buffer(screenshot.base64, 'base64');
         job.resultFiles.push(new wpt_client.ResultFile(
-            wpt_client.ResultFile.ResultType.IMAGE,
+            wpt_client.ResultFile.ContentType.IMAGE_PNG,
             screenshot.fileName,
-            screenshot.contentType,
             contentBuffer));
         if (screenshot.description) {
           imageDescriptors.push({
@@ -148,7 +226,7 @@ Agent.prototype.scheduleProcessDone_ = function(ipcMsg, job) {
       process_utils.scheduleFunction(this.app_, 'Read video file',
           fs.readFile, ipcMsg.videoFile).then(function(buffer) {
         job.resultFiles.push(new wpt_client.ResultFile(
-            wpt_client.ResultFile.ResultType.IMAGE,
+            wpt_client.ResultFile.ContentType.IMAGE,
             'video.avi', 'video/avi', buffer));
       }, function() { // ignore errors?
       });
@@ -351,6 +429,7 @@ Agent.prototype.scheduleCleanup_ = function() {
   this.trafficShaper_.scheduleStop();
   // TODO kill dangling child processes
 };
+
 
 /**
  * Node.js is a multiplatform framework, however because we are making native

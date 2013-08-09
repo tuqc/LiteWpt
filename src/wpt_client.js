@@ -26,10 +26,15 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
+var async = require('async');
+var crypto = require('crypto');
 var events = require('events');
 var fs = require('fs');
+var har = require('har');
 var http = require('http');
 var logger = require('logger');
+var mkdirp = require('mkdirp');
+var moment = require('moment');
 var multipart = require('multipart');
 var path = require('path');
 var url = require('url');
@@ -42,6 +47,8 @@ exports.process = process;
 var GET_WORK_SERVLET = 'work/getwork.php';
 var RESULT_IMAGE_SERVLET = 'work/resultimage.php';
 var WORK_DONE_SERVLET = 'work/workdone.php';
+
+var RESULT_DIR = './result';
 
 // Task JSON field names
 var JOB_TEST_ID = 'Test ID';
@@ -87,11 +94,10 @@ function Job(client, task) {
   'use strict';
   this.client_ = client;
   this.task = task;
-  this.id = task[JOB_TEST_ID];
-  if ('string' !== typeof this.id || !this.id) {
-    this.id = 'test_id';
-    //throw new Error('Task has invalid/missing id: ' + JSON.stringify(task));
+  if (!task.id) {
+    task.id = Job.generateID();
   }
+  this.id = task.id;
   this.captureVideo = (1 === task[JOB_CAPTURE_VIDEO]);
   var runs = task[JOB_RUNS];
   if ('number' !== typeof runs || runs <= 0 || runs > MAX_RUNS ||
@@ -115,6 +121,13 @@ function Job(client, task) {
 /** Public class. */
 exports.Job = Job;
 
+
+Job.generateID = function(job) {
+  var randStr = crypto.randomBytes(2).toString('hex');
+  var dateStr = moment().format('YYYYMMDDHHmm');
+  return dateStr + '_' + randStr;
+}
+
 /**
  * Called to finish the current run of this job, submit results, start next run.
  *
@@ -122,8 +135,73 @@ exports.Job = Job;
  */
 Job.prototype.runFinished = function(isRunFinished) {
   'use strict';
-  this.client_.finishRun_(this, isRunFinished);
+  this.task['success'] = true;
+  this.task['finishTime'] = moment().format('YYYY-MM-DD HH:mm:ss');
+  this.resultFiles.push(
+      new ResultFile(ResultFile.ContentType.JSON,
+                    'task.json', JSON.stringify(this.task)));
+//  this.zipResultFiles['task.json'] = JSON.stringify(task);
+//  this.zipResultFiles['har.json'] = JSON.stringify(harJson);
+  var jobResult = new JobResult(this.id, this.client_.resultDir);
+
+  jobResult.writeResult(this.resultFiles, (function(){
+    this.client_.finishRun_(this, isRunFinished);
+  }).bind(this));
+
 };
+
+function JobResult(jobID, baseDir) {
+  'use strict';
+  this.jobID = jobID;
+  this.baseDir = baseDir;
+  this.path = this.getResultDir();
+}
+exports.JobResult = JobResult;
+
+JobResult.prototype.getResultDir = function() {
+  'use strict';
+  var dateStr = this.jobID.split('_')[0];
+  var date = moment(dateStr, 'YYYYMMDDHHmm');
+  var align = function(num) {
+    return num >= 10 ? '' + num : '0' + num;
+  }
+  var path = util.format('%s/%s/%s/%s/%s/%s', this.baseDir,
+                         align(date.year()), align(date.month()),
+                         align(date.day()), align(date.hour()),
+                         this.jobID);
+  return path;
+}
+
+JobResult.prototype.writeResult = function(resultFiles, callback) {
+  'use strict';
+  logger.info('Write results %s to %s', this.jobID, this.path);
+
+  var writeFile = (function(resultFile, fn){
+    // Write File
+    var filePath = this.path + '/' + resultFile.fileName;
+    fs.writeFile(filePath, resultFile.content, function(err){
+      fn(err);
+    });
+  }).bind(this);
+
+
+  mkdirp(this.path, function(err){
+    if (err) {
+      logger.error(err);
+    }
+    // Write result files
+    async.each(resultFiles, writeFile, function(err){
+      if (err) throw err;
+      if(callback){
+        callback();
+      }
+    });
+  });
+}
+
+JobResult.prototype.getHAR = function(resultFiles) {
+  'use strict';
+}
 
 /**
  * ResultFile sets information about the file produced as a
@@ -136,9 +214,8 @@ Job.prototype.runFinished = function(isRunFinished) {
  * @param {string} contentType MIME content type.
  * @param {string|Buffer} content the content to send.
  */
-function ResultFile(resultType, fileName, contentType, content) {
+function ResultFile(contentType, fileName, content) {
   'use strict';
-  this.resultType = resultType;
   this.fileName = fileName;
   this.contentType = contentType;
   this.content = content;
@@ -147,11 +224,16 @@ function ResultFile(resultType, fileName, contentType, content) {
 exports.ResultFile = ResultFile;
 
 /**
- * Constants to use for ResultFile.resultType.
+ * Constants to use for ResultFile.contentType.
  */
-ResultFile.ResultType = Object.freeze({
+
+ResultFile.ContentType = Object.freeze({
   IMAGE: 'image',
-  IMAGE_ANNOTATIONS: 'image_annotations'
+  IMAGE_PNG: 'image/png',
+  IMAGE_JPEG: 'image/jpeg',
+  TEXT: 'text/plain',
+  JSON: 'application/json',
+  ZIP: 'application/zip',
 });
 
 
@@ -232,6 +314,9 @@ function Client(args) {
   this.onStartJobRun = undefined;
   this.onJobTimeout = undefined;
   this.handlingUncaughtException_ = undefined;
+  this.resultDir = args.resultDir || RESULT_DIR;
+
+  logger.info('Write result data to %s', this.resultDir);
 
   exports.process.on('uncaughtException', this.onUncaughtException_.bind(this));
 
@@ -280,126 +365,25 @@ Client.prototype.onUncaughtException_ = function(e) {
  */
 Client.prototype.requestNextJob_ = function() {
   'use strict';
-
-  var task = {
+ 
+   var task = {
     //"url": "http://www.google.com",
     "url":"",
-    "domElement": "",
-    "login": "",
-    "password": "",
     "runs": 1,
     "fvonly": 0,
     "connections": 0,
-    "private": 0,
-    "web10": 0,
-    "ignoreSSL": 0,
-    "script": "driver = new webdriver.Builder().build();driver.get('http://www.google.com'); driver.wait(function()  { return driver.getTitle();});",
-    "block": null,
-    "notify": "",
-    "video": null,
-    "label": "",
-    "industry": "",
-    "industry_page": "",
-    "median_video": 0,
-    "ip": "173.194.99.20",
-    "uid": null,
-    "user": null,
-    "priority": 5,
-    "bwIn": 0,
-    "bwOut": 0,
-    "latency": 50,
-    "testLatency": 50,
-    "plr": 0,
-    "callback": null,
-    "agent": null,
-    "aftEarlyCutoff": 0,
-    "aftMinChanges": 0,
-    "tcpdump": 0,
-    "timeline": 0,
-    "trace": 0,
-    "standards": 0,
-    "netlog": 0,
-    "spdy3": 0,
-    "noscript": 0,
-    "blockads": 0,
-    "sensitive": 0,
-    "type": "",
-    "noopt": "",
-    "noimages": "",
-    "noheaders": 0,
-    "view": "",
-    "discard": 0,
-    "queue_limit": 0,
-    "pngss": 0,
-    "iq": 0,
-    "bodies": 0,
-    "time": 0,
-    "clear_rv": 0,
-    "keepua": 0,
-    "benchmark": null,
-    "max_retries": 0,
-    "pss_advanced": 0,
-    "shard_test": 0,
-    "mobile": 0,
-    "clearcerts": 0,
-    "orientation": "default",
-    "location": "Test",
-    "batch": 0,
-    "vd": null,
-    "vh": null,
-    "owner": "e9aa2f56715c098af6d8442b5cdeb260966d6eaf",
-    "key": null,
-    "aft": 0,
-    "locationText": "Test Location - <b>Cable</b>",
-    "workdir": "./work/jobs/Test",
-    "remoteUrl": null,
-    "remoteLocation": null,
-    "connectivity": "Cable",
-    "path": "./results/13/08/01/01/1PT",
-    "job": "130801_01_1PT.p5",
-    "job_file": "/home/dashboard/wpt/www/webpagetest/work/jobs/Test/130801_01_1PT.p5",
-    "tester": "127.0.0.1",
-    "started": 1375368024,
-    "id": "130801_01_1PT",
-    "last_updated": 1375368044,
- //   "completed": 1375368044,
-    "medianRun": 1
+    "script": "driver = new webdriver.Builder().build();driver.get('http://www.baidu.com'); driver.wait(function()  { return driver.getTitle();});",
   };
-
   var job = new Job(this, task);
   logger.info('Got job: %j', job);
   this.startNextRun_(job);
-
-  /*
-  var getWorkUrl = url.resolve(this.baseUrl_,
-      GET_WORK_SERVLET +
-          '?location=' + encodeURIComponent(this.location_) +
-          (this.deviceSerial_ ?
-             ('&pc=' + encodeURIComponent(this.deviceSerial_)) : '') +
-          '&f=json');
-
-  logger.info('Get work: %s', getWorkUrl);
-  var request = http.get(url.parse(getWorkUrl), function(res) {
-    exports.processResponse(res, function(responseBody) {
-      if (responseBody === '') {
-        this.emit('nojob');
-      } else if (responseBody[0] === '<') {
-        // '<' is a sign that it's HTML, most likely an error page.
-        logger.warn('Error response? ' + responseBody);
-        this.emit('nojob');
-      } else if (responseBody === 'shutdown') {
-        this.emit('shutdown');
-      } else {  // We got a job
-        this.processJobResponse_(responseBody);
-      }
-    }.bind(this));
-  }.bind(this));
-  request.on('error', function(e) {
-    logger.warn('Got error: ' + e.message);
-    this.emit('nojob');
-  }.bind(this)); 
-  */ 
 };
+
+Client.prototype.runTask = function(task) {
+  var job = new Job(this, task);
+  logger.info('Got job: %j', job);
+  this.startNextRun_(job);
+}
 
 /**
  * processJobResponse_ processes a server response and starts a new job
@@ -477,10 +461,13 @@ Client.prototype.finishRun_ = function(job, isRunFinished) {
   logger.alert('Finished run %s/%s (isRunFinished=%s) of job %s',
       job.runNumber, job.runs, isRunFinished, job.id);
   // Expected finish of the current job
-  if (true || this.currentJob_ === job) {
+  if (this.currentJob_ === job) {
     global.clearTimeout(this.timeoutTimer_);
     this.timeoutTimer_ = undefined;
     this.currentJob_ = undefined;
+
+
+    /*
     this.submitResult_(job, isRunFinished, function() {
       return;
       this.handlingUncaughtException_ = undefined;
@@ -497,6 +484,7 @@ Client.prototype.finishRun_ = function(job, isRunFinished) {
         this.startNextRun_(job);
       }
     }.bind(this));
+    */
   } else {  // Belated finish of an old already timed-out job
     logger.error('Timed-out job finished, but too late: %s', job.id);
     this.handlingUncaughtException_ = undefined;
@@ -522,9 +510,6 @@ function createZip(zipFileMap, fileNamePrefix) {
           });
         }
       });
-
-
-
 
     logger.debug('Adding %s%s (%d bytes) to results zip',
         fileNamePrefix, fileName, content.length);
@@ -564,12 +549,12 @@ Client.prototype.postResultFile_ = function(job, resultFile, fields, callback) {
   }
   if (resultFile) {
     // A part with name="resultType" and then the content with name="file"
-    if (exports.ResultFile.ResultType.IMAGE === resultFile.resultType) {
+    if (exports.ResultFile.ContentType.IMAGE_PNG === resultFile.contentType) {
       // Images go to a different servlet and don't need the resultType part
       servlet = RESULT_IMAGE_SERVLET;
     } else {
-      if (resultFile.resultType) {
-        mp.addPart(resultFile.resultType, '1');
+      if (resultFile.contentType) {
+        mp.addPart(resultFile.contentType, '1');
       }
       mp.addPart('_runNumber', String(job.runNumber));
       mp.addPart('_cacheWarmed', job.isCacheWarm ? '1' : '0');
