@@ -1,5 +1,6 @@
 
 var events = require('events');
+var logger = require('logger');
 var util = require('util');
 var url = require('url');
 
@@ -24,44 +25,32 @@ function parseFromMessages(messages) {
     }
   };
 
-  var frameIds = {};
-  var pages = [];
+  var rootUrl = undefined;
+  for (var i in messages) {
+    var message = messages[i];
+    if (message.params && message.params.documentURL &&
+        message.params.documentURL.indexOf('http') == 0) {
+      rootUrl = message.params.documentURL;
+      break;
+    }
+  }
+
+  if (rootUrl == undefined) {
+    return;
+  }
   var pageCount = 0;
+  var page = new Page('page_1_' + pageCount, rootUrl);
+  
   for (var i in messages) {
     var message = messages[i];
-    if (message.params.frameId && message.params.documentURL) {
-      var frameId = message.params.frameId;
-      if (!(frameId in frameIds)) {
-        var page = new Page('page_1_' + pageCount, message.params.documentURL, frameId);
-        pages.push(page);
-        frameIds[frameId] = page;
-        pageCount ++;
-      }
-    }
+    page.processMessage(message);
   }
 
-  var pageIndex = 0;
-  for (var i in messages) {
-    var message = messages[i];
-    var curPage = pages[pageIndex];
-    if (message.params.frameId && message.params.frameId !== curPage.frameId) {
-      pageIndex++;
-      curPage = pages[pageIndex];
-    }
-    if (curPage) {
-      curPage.processMessage(message);
-    }
+  if (page.isOk()) {
+    var pageHAR = page.getHAR();
+    har.log.pages.push(pageHAR.info);
+    Array.prototype.push.apply(har.log.entries, pageHAR.entries);
   }
-
-  for (var i in pages) {
-    var page = pages[i];
-    if (page.isOk()) {
-      var pageHAR = page.getHAR();
-      har.log.pages.push(pageHAR.info);
-      Array.prototype.push.apply(har.log.entries, pageHAR.entries);
-    }
-  }
-
   return har;
 }
 

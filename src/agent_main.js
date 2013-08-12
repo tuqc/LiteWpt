@@ -94,14 +94,18 @@ Agent.prototype.run = function() {
 
   // Http paths
   this.httpServer.use(express.bodyParser());
+  this.httpServer.get('/task/queue', this.showTaskQueue.bind(this));
   this.httpServer.get('/task/submit', this.submitTask.bind(this));
   this.httpServer.post('/task/submit', this.submitTask.bind(this));
   this.httpServer.get('/task/check/:tid', this.checkTask.bind(this));
   this.httpServer.get('/healthz', this.healthz.bind(this));
   this.httpServer.get('/varz', this.varz.bind(this));
 
+
+
   console.log('Start HTTP server with port=' + this.httpPort);
-  this.httpServer.listen(this.httpPort);
+  this.httpServer.listen(this.httpPort);  
+  this.client_.run();
 };
 
 Agent.prototype.healthz = function(req, res) {
@@ -131,6 +135,9 @@ Agent.prototype.submitTask = function(req, res) {
 
   if (!task.script) {
     if (task.url) {
+      if (task.url.indexOf('http') != 0) {
+        task.url = 'http://' + task.url;
+      }
       task.script = util.format(WD_SCRIPT_TEMPLATE, task.url);
     } else {
       res.send('error.');
@@ -141,16 +148,27 @@ Agent.prototype.submitTask = function(req, res) {
   if (!task.runs) task.runs = 1;
   if (!task.fvonly) task.fvonly = 1;
 
-  this.client_.runTask(task);
+  var id = this.client_.addTask(task);
   res.send(JSON.stringify(req.body) + '---' + JSON.stringify(req.params) + '---' + JSON.stringify(req.query)) ;
 }
 
 Agent.prototype.checkTask = function(req, res) {
   'use strict';
-   res.send(req.params.tid);
-   res.send('ok.');
+  res.send(req.params.tid);
+  res.send('ok.');
 }
 
+Agent.prototype.showTaskQueue = function(req, res) {
+  'use strict';
+  var buf = [];
+  for (var i in this.client_.jobQueue) {
+    var job = this.client_.jobQueue[i];
+    buf[i] = job.id + ' -> ' + JSON.stringify(job.task);
+  }
+  res.set('Content-Type', 'text/plain');  
+  res.send('Total tasks: ' + this.client_.jobQueue.length +
+           '\n\n' + buf.join('\n\n'));
+}
 
 /**
  * @param {string=} description debug title.

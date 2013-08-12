@@ -58,7 +58,7 @@ var JOB_FIRST_VIEW_ONLY = 'fvonly';
 
 var DEFAULT_JOB_TIMEOUT = 80000;
 /** Allow test access. */
-exports.NO_JOB_PAUSE = 10000;
+exports.NO_JOB_PAUSE = 5000;
 var MAX_RUNS = 1000;  // Sanity limit
 
 
@@ -99,7 +99,7 @@ function Job(client, task) {
   }
   this.id = task.id;
   this.captureVideo = (1 === task[JOB_CAPTURE_VIDEO]);
-  var runs = task[JOB_RUNS];
+  var runs = task[JOB_RUNS] ? task[JOB_RUNS] : 1;
   if ('number' !== typeof runs || runs <= 0 || runs > MAX_RUNS ||
       0 !== (runs - Math.floor(runs))) {  // Make sure it's an integer.
     throw new Error('Task has invalid/missing number of runs: ' +
@@ -166,8 +166,8 @@ JobResult.prototype.getResultDir = function() {
     return num >= 10 ? '' + num : '0' + num;
   }
   var path = util.format('%s/%s/%s/%s/%s/%s', this.baseDir,
-                         align(date.year()), align(date.month()),
-                         align(date.day()), align(date.hour()),
+                         align(date.year()), align(date.month() + 1),
+                         align(date.date()), align(date.hour()),
                          this.jobID);
   return path;
 }
@@ -315,6 +315,7 @@ function Client(args) {
   this.onJobTimeout = undefined;
   this.handlingUncaughtException_ = undefined;
   this.resultDir = args.resultDir || RESULT_DIR;
+  this.jobQueue = new Array();
 
   logger.info('Write result data to %s', this.resultDir);
 
@@ -357,32 +358,22 @@ Client.prototype.onUncaughtException_ = function(e) {
   }
 };
 
-/**
- * requestNextJob_ will query the server for a new job and will either process
- * the job response to begin it, emit 'nojob' or 'shutdown'.
- *
- * @private
- */
-Client.prototype.requestNextJob_ = function() {
-  'use strict';
- 
-   var task = {
-    //"url": "http://www.google.com",
-    "url":"",
-    "runs": 1,
-    "fvonly": 0,
-    "connections": 0,
-    "script": "driver = new webdriver.Builder().build();driver.get('http://www.baidu.com'); driver.wait(function()  { return driver.getTitle();});",
-  };
-  var job = new Job(this, task);
-  logger.info('Got job: %j', job);
-  this.startNextRun_(job);
-};
 
-Client.prototype.runTask = function(task) {
+Client.prototype.addTask = function(task) {
   var job = new Job(this, task);
-  logger.info('Got job: %j', job);
-  this.startNextRun_(job);
+  logger.info('Add task: %j', task);
+  this.jobQueue.push(job);
+  return job.id;
+}
+
+Client.prototype.runNextJob = function() {
+  var job = this.jobQueue.shift();
+  if (job) {
+    logger.info('Run job: %s', job.id);
+    this.startNextRun_(job);
+  } else {
+    this.emit('nojob');
+  }
 }
 
 /**
@@ -407,7 +398,7 @@ Client.prototype.processJobResponse_ = function(responseBody) {
     return;
   }
   var job = new Job(this, task);
-  logger.info('Got job: %j', job);
+  logger.info('Got job: %j', job.id);
   this.startNextRun_(job);
 };
 
@@ -466,28 +457,25 @@ Client.prototype.finishRun_ = function(job, isRunFinished) {
     this.timeoutTimer_ = undefined;
     this.currentJob_ = undefined;
 
-
-    /*
-    this.submitResult_(job, isRunFinished, function() {
-      return;
-      this.handlingUncaughtException_ = undefined;
-      // Run until we finish the last iteration.
-      // Do not increment job.runNumber past job.runs.
-      if (!(isRunFinished && job.runNumber === job.runs)) {
-        // Continue running
-        if (isRunFinished) {
-          job.runNumber += 1;
-          if (job.runNumber > job.runs) {  // Sanity check.
-            throw new Error('Internal error: job.runNumber > job.runs');
-          }
+    this.handlingUncaughtException_ = undefined;
+    // Run until we finish the last iteration.
+    // Do not increment job.runNumber past job.runs.
+    if (!(isRunFinished && job.runNumber === job.runs)) {
+      // Continue running
+      if (isRunFinished) {
+        job.runNumber += 1;
+        if (job.runNumber > job.runs) {  // Sanity check.
+          throw new Error('Internal error: job.runNumber > job.runs');
         }
-        this.startNextRun_(job);
       }
-    }.bind(this));
-    */
+      this.startNextRun_(job);
+    } else {
+      this.emit('done');
+    }
   } else {  // Belated finish of an old already timed-out job
     logger.error('Timed-out job finished, but too late: %s', job.id);
     this.handlingUncaughtException_ = undefined;
+    this.emit('done');
   }
 };
 
@@ -667,19 +655,19 @@ Client.prototype.submitResult_ = function(job, isRunFinished, callback) {
  *                  the request off of 'done' and 'nojob' events, running
  *                  forever or until the server responds with 'shutdown'.
  */
-Client.prototype.run = function(forever) {
+Client.prototype.run = function() {
   'use strict';
   var self = this;
+  this.on('nojob', function() {
+    logger.info('No more job, pause ' + exports.NO_JOB_PAUSE);
+    global.setTimeout(function() {
+      self.runNextJob();
+    }, exports.NO_JOB_PAUSE);
+  });
 
-  if (forever) {
-    this.on('nojob', function() {
-      global.setTimeout(function() {
-        self.requestNextJob_();
-      }, exports.NO_JOB_PAUSE);
-    });
-    this.on('done', function() {
-      self.requestNextJob_();
-    });
-  }
-  this.requestNextJob_();
+  this.on('done', function() {
+    self.runNextJob();
+  });
+
+  this.runNextJob();
 };
