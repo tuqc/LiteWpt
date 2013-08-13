@@ -5,7 +5,14 @@ var util = require('util');
 exports.task2Html = function(task) {
   var buf = [];
   buf.push('<pre>');
-  buf.push('ID:      ' + task.id);
+  if (task.success === undefined) {
+    buf.push('ID:      ' + task.id);
+  } else {
+    buf.push('ID:      ' + task.id + '   Status:' +
+             (task.success ?
+              '<font color="green">Success</font>':
+              '<font color="red">Failed</font>'));
+  }
   if (task.submitTimestamp) {
       buf.push('Submit:  ' +
                exports.timestamp2Str(task.submitTimestamp));

@@ -56,7 +56,7 @@ var JOB_CAPTURE_VIDEO = 'Capture Video';
 var JOB_RUNS = 'runs';
 var JOB_FIRST_VIEW_ONLY = 'fvonly';
 
-var DEFAULT_JOB_TIMEOUT = 80000;
+var DEFAULT_JOB_TIMEOUT = 30000;
 /** Allow test access. */
 exports.NO_JOB_PAUSE = 5000;
 var MAX_RUNS = 1000;  // Sanity limit
@@ -130,10 +130,11 @@ Job.generateID = function(job) {
 
 Job.prototype.processHAR = function(harJson) {
   'use strict';
-  if (harJson && harJson.pages.length > 0 && harJson.entries.length > 0) {
+  if (harJson && harJson.log.pages.length > 0 &&
+      harJson.log.entries.length > 0) {
     this.task['success'] = true;
   } else {
-    this.task['success'] = true;
+    this.task['success'] = false;
   }
 }
 
