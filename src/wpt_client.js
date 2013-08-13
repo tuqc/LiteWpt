@@ -128,6 +128,15 @@ Job.generateID = function(job) {
   return dateStr + '_' + randStr;
 }
 
+Job.prototype.processHAR = function(harJson) {
+  'use strict';
+  if (harJson && harJson.pages.length > 0 && harJson.entries.length > 0) {
+    this.task['success'] = true;
+  } else {
+    this.task['success'] = true;
+  }
+}
+
 /**
  * Called to finish the current run of this job, submit results, start next run.
  *
@@ -135,8 +144,12 @@ Job.generateID = function(job) {
  */
 Job.prototype.runFinished = function(isRunFinished) {
   'use strict';
-  this.task['success'] = true;
-  this.task['finishTime'] = moment().format('YYYY-MM-DD HH:mm:ss');
+  this.task['endTimestamp'] = moment().unix();
+  this.client_.finishedTasks.push(this.task);
+  if (this.client_.finishedTasks.length > 1000) {
+    this.client_.finishedTasks.shift();
+  }    
+
   this.resultFiles.push(
       new ResultFile(ResultFile.ContentType.JSON,
                     'task.json', JSON.stringify(this.task)));
@@ -170,6 +183,10 @@ JobResult.prototype.getResultDir = function() {
                          align(date.date()), align(date.hour()),
                          this.jobID);
   return path;
+}
+
+JobResult.prototype.getResultFile = function(filename) {
+  return this.getResultDir() + '/' + filename;
 }
 
 JobResult.prototype.writeResult = function(resultFiles, callback) {
@@ -317,6 +334,7 @@ function Client(args) {
   this.resultDir = args.resultDir || RESULT_DIR;
   this.jobQueue = new Array();
 
+  this.finishedTasks = new Array();
   logger.info('Write result data to %s', this.resultDir);
 
   exports.process.on('uncaughtException', this.onUncaughtException_.bind(this));
@@ -358,6 +376,9 @@ Client.prototype.onUncaughtException_ = function(e) {
   }
 };
 
+Client.prototype.getJobResult = function(jobID) {
+  return new JobResult(jobID, this.resultDir);
+}
 
 Client.prototype.addTask = function(task) {
   var job = new Job(this, task);
@@ -370,6 +391,7 @@ Client.prototype.runNextJob = function() {
   var job = this.jobQueue.shift();
   if (job) {
     logger.info('Run job: %s', job.id);
+    job.task['startTimestamp'] = moment().unix();
     this.startNextRun_(job);
   } else {
     this.emit('nojob');
@@ -451,6 +473,7 @@ Client.prototype.finishRun_ = function(job, isRunFinished) {
   'use strict';
   logger.alert('Finished run %s/%s (isRunFinished=%s) of job %s',
       job.runNumber, job.runs, isRunFinished, job.id);
+
   // Expected finish of the current job
   if (this.currentJob_ === job) {
     global.clearTimeout(this.timeoutTimer_);

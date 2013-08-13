@@ -27,10 +27,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
 var child_process = require('child_process');
+var common_utils = require('common_utils');
+var dns = require('dns');
 var express = require('express');
 var fs = require('fs');
 var har = require('har');
 var logger = require('logger');
+var moment = require('moment');
 var nopt = require('nopt');
 var process_utils = require('process_utils');
 var system_commands = require('system_commands');
@@ -82,6 +85,8 @@ function Agent(client, flags) {
 
   this.client_.onStartJobRun = this.startJobRun_.bind(this);
   this.client_.onJobTimeout = this.jobTimeout_.bind(this);
+
+  this.startDate = moment();
 }
 /** Public class. */
 exports.Agent = Agent;
@@ -94,14 +99,16 @@ Agent.prototype.run = function() {
 
   // Http paths
   this.httpServer.use(express.bodyParser());
+  this.httpServer.get('/', this.showSummary.bind(this));
+  this.httpServer.get('/ip', this.resolveIP.bind(this));
   this.httpServer.get('/task/queue', this.showTaskQueue.bind(this));
   this.httpServer.get('/task/submit', this.submitTask.bind(this));
   this.httpServer.post('/task/submit', this.submitTask.bind(this));
-  this.httpServer.get('/task/check/:tid', this.checkTask.bind(this));
+  this.httpServer.get('/task/status/:id', this.showTaskStatus.bind(this));
+  this.httpServer.get('/task/result/:id', this.listTaskResult.bind(this));
+  this.httpServer.get('/task/result/:id/:filename', this.showTaskResult.bind(this));
   this.httpServer.get('/healthz', this.healthz.bind(this));
   this.httpServer.get('/varz', this.varz.bind(this));
-
-
 
   console.log('Start HTTP server with port=' + this.httpPort);
   this.httpServer.listen(this.httpPort);  
@@ -109,11 +116,60 @@ Agent.prototype.run = function() {
 };
 
 Agent.prototype.healthz = function(req, res) {
+  res.set('Content-Type', 'text/plain');  
   res.send('ok');
 }
 
 Agent.prototype.varz = function(req, res) {
+  res.set('Content-Type', 'text/plain');  
   res.send('ok');
+}
+
+Agent.prototype.resolveIP = function(req, res) {
+  var host = req.query.host;
+  if (!host) {
+    res.send(500, '');
+  }
+  dns.resolve4(host, function (err, addresses) {
+    if (err || (!addresses)) {
+      res.send(500, '');
+    } else {
+      res.send(addresses[0]);
+    }
+  });
+}
+
+Agent.prototype.showSummary = function(req, res) {
+
+  var buf = [];
+  buf.push('<html><body>');
+  buf.push('Server start from: <strong>' +
+           this.startDate.format('YYYY-MM-DD HH:mm:ss') +
+           '</strong>; <strong>' + this.startDate.fromNow() + '</strong><br>');
+  buf.push('Server current time: ' + moment().format('YYYY-MM-DD HH:mm:ss') + '<br>');
+
+  buf.push('<strong>Running Jobs:</strong><br>');
+  if (this.client_.currentJob_) {
+    buf.push(common_utils.task2Html(this.client_.currentJob_.task) + '<br>');
+  }
+
+  buf.push('<strong>Waiting Jobs:</strong><br>');
+  for (var i in this.client_.jobQueue) {
+    var job = this.client_.jobQueue[i];
+    buf.push(common_utils.task2Html(job.task) + '<br>');
+  }
+
+  buf.push('<strong>Finished Jobs:</strong>(Recent 1000)<br>');
+
+  for (var i in this.client_.finishedTasks) {
+    var task = this.client_.finishedTasks[i];    
+    buf.push(common_utils.task2Html(task) + '<br>');
+  }
+
+  buf.push('</body></html>');
+
+  res.set('Content-Type', 'text/html');
+  res.send(buf.join('\n'));
 }
 
 /**
@@ -133,6 +189,7 @@ Agent.prototype.submitTask = function(req, res) {
     task['url'] = req.query.url;
   }
 
+  task['submitTimestamp'] = moment().unix();
   if (!task.script) {
     if (task.url) {
       if (task.url.indexOf('http') != 0) {
@@ -149,12 +206,13 @@ Agent.prototype.submitTask = function(req, res) {
   if (!task.fvonly) task.fvonly = 1;
 
   var id = this.client_.addTask(task);
-  res.send(JSON.stringify(req.body) + '---' + JSON.stringify(req.params) + '---' + JSON.stringify(req.query)) ;
+  res.set('Content-Type', 'text/plain');  
+  res.send({'id': id});
 }
 
-Agent.prototype.checkTask = function(req, res) {
+Agent.prototype.showTaskStatus = function(req, res) {
   'use strict';
-  res.send(req.params.tid);
+  res.send(req.params.id);
   res.send('ok.');
 }
 
@@ -165,10 +223,56 @@ Agent.prototype.showTaskQueue = function(req, res) {
     var job = this.client_.jobQueue[i];
     buf[i] = job.id + ' -> ' + JSON.stringify(job.task);
   }
-  res.set('Content-Type', 'text/plain');  
+  res.set('Content-Type', 'text/plain');
   res.send('Total tasks: ' + this.client_.jobQueue.length +
            '\n\n' + buf.join('\n\n'));
 }
+
+Agent.prototype.showTaskResult = function(req, res) {
+  'use strict';
+  var id = req.params.id;
+  var filename = req.params.filename;
+
+  var jobResult = this.client_.getJobResult(id);
+  var filepath = jobResult.getResultFile(filename);
+
+  fs.exists(filepath, function (exists) {
+    if (exists) {
+      if (req.query.view) {
+        res.sendfile(filepath);
+      } else {
+        res.download(filepath);     
+      }    
+    } else {
+      res.send(404, 'Sorry, cannot find file ' + filepath);
+    }
+  }); 
+}
+
+
+Agent.prototype.listTaskResult = function(req, res) {
+  'use strict';
+  var id = req.params.id;
+
+  var jobResult = this.client_.getJobResult(id);
+  var filepath = jobResult.getResultDir();
+
+  fs.readdir(filepath, function(err, files){
+    if (err) {
+      res.send(404, err);
+    } else {
+      var buf = [];
+      for (var i in files) {
+        buf[i] = util.format(
+            '<a href="/task/result/%s/%s?view=true" target=_blank>%s</a><br>',
+            id, files[i], files[i]);
+      }
+      res.set('Content-Type', 'text/html');
+      res.send(buf.join('\n'));
+    }
+  });
+}
+
 
 /**
  * @param {string=} description debug title.
@@ -215,6 +319,7 @@ Agent.prototype.scheduleProcessDone_ = function(ipcMsg, job) {
               wpt_client.ResultFile.ContentType.JSON,
               'devtools.json', devMessage));
       var harJson = har.parseFromText(devMessage);
+      job.processHAR(harJson);
       job.resultFiles.push(
           new wpt_client.ResultFile(
               wpt_client.ResultFile.ContentType.JSON,
