@@ -98,6 +98,9 @@ Page.prototype.isOk = function () {
 // [...]
 // Network.loadingFinished   # full response received
 Page.prototype.processMessage = function (message) {
+  if (!(message && message.params)) {
+    return;
+  }
   var id = message.params.requestId;
   switch (message.method) {
     case 'Network.requestWillBeSent':
