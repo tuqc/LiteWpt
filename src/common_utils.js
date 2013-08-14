@@ -23,10 +23,18 @@ exports.task2Html = function(task) {
   }
 
   if (task.endTimestamp) {
+    var detailLinkTpl = '/static/harviewer.html?path=' +
+        '/task/result/%s/har.json&expand=true&validate=false';
+    var detailLink = util.format(detailLinkTpl, task.id);
+    var screenshotLink = util.format('/task/result/%s/screen.png?view=true',
+                                     task.id);
     buf.push(
         util.format(
-            'Finished:<a href="/task/result/%s" target=_blank>%s</a>',
-            task.id, exports.timestamp2Str(task.endTimestamp)));
+            'Finished:%s <a href="%s" target=_blank>Details</a> ' +
+            '<a href="%s" target=_blank>Screenshot</a> ' +
+            '<a href="/task/result/%s" target=_blank>Raw output</a>',
+            exports.timestamp2Str(task.endTimestamp), detailLink,
+            screenshotLink, task.id));
   }
 
   if (task.url) {

@@ -86,6 +86,7 @@ function Agent(client, flags) {
   this.client_.onStartJobRun = this.startJobRun_.bind(this);
   this.client_.onJobTimeout = this.jobTimeout_.bind(this);
 
+  this.staticDir = './static/';
   this.startDate = moment();
 }
 /** Public class. */
@@ -101,6 +102,7 @@ Agent.prototype.run = function() {
   this.httpServer.use(express.bodyParser());
   this.httpServer.get('/', this.showSummary.bind(this));
   this.httpServer.get('/ip', this.resolveIP.bind(this));
+  this.httpServer.get('/status/:counter', this.showCounter.bind(this));
   this.httpServer.get('/task/queue', this.showTaskQueue.bind(this));
   this.httpServer.get('/task/submit', this.submitTask.bind(this));
   this.httpServer.post('/task/submit', this.submitTask.bind(this));
@@ -109,6 +111,10 @@ Agent.prototype.run = function() {
   this.httpServer.get('/task/result/:id/:filename', this.showTaskResult.bind(this));
   this.httpServer.get('/healthz', this.healthz.bind(this));
   this.httpServer.get('/varz', this.varz.bind(this));
+
+  this.httpServer.use('/static', express.static(this.staticDir));
+  this.httpServer.use('/archive', express.static(this.client_.resultDir));
+  this.httpServer.use('/archive',express.directory(this.client_.resultDir));
 
   console.log('Start HTTP server with port=' + this.httpPort);
   this.httpServer.listen(this.httpPort);  
@@ -139,6 +145,16 @@ Agent.prototype.resolveIP = function(req, res) {
   });
 }
 
+Agent.prototype.showCounter = function(req, res) {
+  var counter = req.params.counter;
+  res.set('Content-Type', 'text/plain');  
+  if (counter == 'pending_tasks') {
+    res.send(this.client_.jobQueue.length);
+  } else {
+    res.send(404, 'Not found' + counter);
+  }
+}
+
 Agent.prototype.showSummary = function(req, res) {
 
   var buf = [];
@@ -162,7 +178,7 @@ Agent.prototype.showSummary = function(req, res) {
   buf.push('<strong>Finished Jobs:</strong>(Recent 1000)<br>');
 
   for (var i in this.client_.finishedTasks) {
-    var task = this.client_.finishedTasks[i];    
+    var task = this.client_.finishedTasks[i];
     buf.push(common_utils.task2Html(task) + '<br>');
   }
 
@@ -184,9 +200,22 @@ Agent.prototype.showSummary = function(req, res) {
  */
 Agent.prototype.submitTask = function(req, res) {
   'use strict';
+  res.set('Content-Type', 'application/json');
   var task = req.body;
-  if ('url' in req.query) {
-    task['url'] = req.query.url;
+  if (!(task.url || task.script)) {
+    task = req.query;
+  }
+
+  // Gid short for group id, Here we don't allow 2 or more tasks
+  // with the same gid in the pending list.
+  if (task.gid) {
+    var found = false;
+    for (var i in this.client_.jobQueue) {
+      var t = this.client_.jobQueue[i].task;
+      if (t.gid && t.gid === task.gid) {
+        return res.send(500, {'message': 'Duplicate gid.'});        
+      }
+    }
   }
 
   task['submitTimestamp'] = moment().unix();
@@ -197,8 +226,7 @@ Agent.prototype.submitTask = function(req, res) {
       }
       task.script = util.format(WD_SCRIPT_TEMPLATE, task.url);
     } else {
-      res.send('error.');
-      return
+      return res.send(501, {'message': 'No url or script.'});
     }
   }
 
@@ -206,14 +234,47 @@ Agent.prototype.submitTask = function(req, res) {
   if (!task.fvonly) task.fvonly = 1;
 
   var id = this.client_.addTask(task);
-  res.set('Content-Type', 'text/plain');  
-  res.send({'id': id});
+  res.send({'id': id, 'postion': this.client_.jobQueue.length});
 }
 
 Agent.prototype.showTaskStatus = function(req, res) {
   'use strict';
-  res.send(req.params.id);
-  res.send('ok.');
+  res.set('Content-Type', 'application/json');
+  var id = req.params.id;
+  if (this.client_.currentJob_ && this.client_.currentJob_.id === id) {
+    return res.send({'status': 'running'});
+  } 
+  for (var i in this.client_.jobQueue) {
+    var job = this.client_.jobQueue[i];
+    if (job.id === id) {
+      return res.send({'status': 'pending', 'position': i + 1});
+    }
+  }
+
+  for (var i in this.client_.finishedTasks) {
+    var task = this.client_.finishedTasks[i];
+    if (task.id === id) {
+      return res.send({'status': 'finished',
+                       'success': task.success || false});
+    }
+  }
+
+  var jobResult = this.client_.getJobResult(id);
+  var filepath = jobResult.getResultFile('task.json');
+
+  fs.readFile(filepath, function (err, data) {
+    if (err) {
+      res.send(404, 'Not found ' + id);
+    } else {
+      var task = JSON.parse(data);
+      if (task) {
+        return res.send({'status': 'finished',
+                         'success': task.success || false});
+      } else {
+        res.send(500, 'Task record error: ' + data);
+      }
+    }
+  });
 }
 
 Agent.prototype.showTaskQueue = function(req, res) {
