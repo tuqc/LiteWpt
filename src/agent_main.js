@@ -213,7 +213,7 @@ Agent.prototype.submitTask = function(req, res) {
     for (var i in this.client_.jobQueue) {
       var t = this.client_.jobQueue[i].task;
       if (t.gid && t.gid === task.gid) {
-        return res.send(500, {'message': 'Duplicate gid.'});        
+        return res.json(500, {'message': 'Duplicate gid.'});        
       }
     }
   }
@@ -226,7 +226,7 @@ Agent.prototype.submitTask = function(req, res) {
       }
       task.script = util.format(WD_SCRIPT_TEMPLATE, task.url);
     } else {
-      return res.send(501, {'message': 'No url or script.'});
+      return res.json(501, {'message': 'No url or script.'});
     }
   }
 
@@ -234,7 +234,7 @@ Agent.prototype.submitTask = function(req, res) {
   if (!task.fvonly) task.fvonly = 1;
 
   var id = this.client_.addTask(task);
-  res.send({'id': id, 'postion': this.client_.jobQueue.length});
+  res.json({'id': id, 'postion': this.client_.jobQueue.length});
 }
 
 Agent.prototype.showTaskStatus = function(req, res) {
@@ -242,19 +242,19 @@ Agent.prototype.showTaskStatus = function(req, res) {
   res.set('Content-Type', 'application/json');
   var id = req.params.id;
   if (this.client_.currentJob_ && this.client_.currentJob_.id === id) {
-    return res.send({'status': 'running'});
+    return res.json({'status': 'running'});
   } 
   for (var i in this.client_.jobQueue) {
     var job = this.client_.jobQueue[i];
     if (job.id === id) {
-      return res.send({'status': 'pending', 'position': i + 1});
+      return res.json({'status': 'pending', 'position': i + 1});
     }
   }
 
   for (var i in this.client_.finishedTasks) {
     var task = this.client_.finishedTasks[i];
     if (task.id === id) {
-      return res.send({'status': 'finished',
+      return res.json({'status': 'finished',
                        'success': task.success || false});
     }
   }
@@ -268,10 +268,10 @@ Agent.prototype.showTaskStatus = function(req, res) {
     } else {
       var task = JSON.parse(data);
       if (task) {
-        return res.send({'status': 'finished',
+        return res.json({'status': 'finished',
                          'success': task.success || false});
       } else {
-        res.send(500, 'Task record error: ' + data);
+        res.json(500, 'Task record error: ' + data);
       }
     }
   });
