@@ -27,6 +27,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
 var async = require('async');
+var common_utils = require('common_utils');
 var crypto = require('crypto');
 var events = require('events');
 var fs = require('fs');
@@ -56,7 +57,7 @@ var JOB_CAPTURE_VIDEO = 'Capture Video';
 var JOB_RUNS = 'runs';
 var JOB_FIRST_VIEW_ONLY = 'fvonly';
 
-var DEFAULT_JOB_TIMEOUT = 30000;
+var DEFAULT_JOB_TIMEOUT = 60000;
 /** Allow test access. */
 exports.NO_JOB_PAUSE = 5000;
 var MAX_RUNS = 1000;  // Sanity limit
@@ -105,7 +106,8 @@ function Job(client, task) {
     throw new Error('Task has invalid/missing number of runs: ' +
         JSON.stringify(task));
   }
-  this.runs = runs;
+  //Only allow run 1 time
+  this.runs = 1;
   this.runNumber = 1;
   var firstViewOnly = task[JOB_FIRST_VIEW_ONLY];
   if (undefined !== firstViewOnly &&  // Undefined means false.
@@ -113,7 +115,7 @@ function Job(client, task) {
     throw new Error('Task has invalid fvonly field: ' + JSON.stringify(task));
   }
   this.isFirstViewOnly = !!firstViewOnly;
-  this.isCacheWarm = false;
+  this.isCacheWarm = !!task.isCacheWarm;
   this.resultFiles = [];
   this.zipResultFiles = {};
   this.error = undefined;
@@ -145,23 +147,25 @@ Job.prototype.processHAR = function(harJson) {
  */
 Job.prototype.runFinished = function(isRunFinished) {
   'use strict';
-  this.task['endTimestamp'] = moment().unix();
-  this.client_.finishedTasks.push(this.task);
-  if (this.client_.finishedTasks.length > 1000) {
-    this.client_.finishedTasks.shift();
-  }    
+  if (isRunFinished) {
+    this.task['endTimestamp'] = moment().unix();
+    this.client_.finishedTasks.push(common_utils.cloneObject(this.task));
+    if (this.client_.finishedTasks.length > 1000) {
+      this.client_.finishedTasks.shift();
+    }
 
-  this.resultFiles.push(
-      new ResultFile(ResultFile.ContentType.JSON,
-                    'task.json', JSON.stringify(this.task)));
-//  this.zipResultFiles['task.json'] = JSON.stringify(task);
-//  this.zipResultFiles['har.json'] = JSON.stringify(harJson);
-  var jobResult = new JobResult(this.id, this.client_.resultDir);
+    this.resultFiles.push(
+        new ResultFile(ResultFile.ContentType.JSON,
+                      'task.json', JSON.stringify(this.task)));
+    var jobResult = new JobResult(this.id, this.client_.resultDir);
 
-  jobResult.writeResult(this.resultFiles, (function(){
+    jobResult.writeResult(this.resultFiles, (function(){
+      this.client_.finishRun_(this, isRunFinished);
+    }).bind(this));
+
+  } else {
     this.client_.finishRun_(this, isRunFinished);
-  }).bind(this));
-
+  }
 };
 
 function JobResult(jobID, baseDir) {
@@ -187,7 +191,7 @@ JobResult.prototype.getResultDir = function() {
 }
 
 JobResult.prototype.getResultFile = function(filename) {
-  return this.getResultDir() + '/' + filename;
+  return this.path + '/' + filename;
 }
 
 JobResult.prototype.writeResult = function(resultFiles, callback) {
@@ -196,8 +200,8 @@ JobResult.prototype.writeResult = function(resultFiles, callback) {
 
   var writeFile = (function(resultFile, fn){
     // Write File
-    var filePath = this.path + '/' + resultFile.fileName;
-    fs.writeFile(filePath, resultFile.content, function(err){
+    var filePath = this.getResultFile(resultFile.fileName);
+    fs.writeFile(filePath, resultFile.content, function(err) {
       fn(err);
     });
   }).bind(this);
@@ -232,7 +236,7 @@ JobResult.prototype.getHAR = function(resultFiles) {
  * @param {string} contentType MIME content type.
  * @param {string|Buffer} content the content to send.
  */
-function ResultFile(contentType, fileName, content) {
+function ResultFile(contentType, fileName, content, runNumber) {
   'use strict';
   this.fileName = fileName;
   this.contentType = contentType;
@@ -436,7 +440,7 @@ Client.prototype.startNextRun_ = function(job) {
   this.currentJob_ = job;
   // Set up job timeout
   this.timeoutTimer_ = global.setTimeout(function() {
-    logger.error('job timeout: %s', job.id);
+    logger.error('job timeout: %s, max=%s', job.id, this.jobTimeout);
     job.error = 'timeout';
     if (this.onJobTimeout) {
       this.onJobTimeout(job);

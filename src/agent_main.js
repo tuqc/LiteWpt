@@ -65,6 +65,7 @@ var WD_SERVER_EXIT_TIMEOUT = 5000;  // Wait for 5 seconds before force-killing
 var WD_SCRIPT_TEMPLATE = " \
     driver = new webdriver.Builder().build(); \
     driver.get('%s'); \
+    driver.sleep(3000); \
     driver.wait(function()  { return driver.getTitle();});";
 
 /**
@@ -230,8 +231,9 @@ Agent.prototype.submitTask = function(req, res) {
     }
   }
 
-  if (!task.runs) task.runs = 1;
-  if (!task.fvonly) task.fvonly = 1;
+  task.runs = (task.runs ? parseInt(task.runs) : 1);
+  task.fvonly = (task.fvonly ? parseInt(task.fvonly) : 1);
+  task.isCacheWarm = (task.isCacheWarm ? parseInt(task.isCacheWarm) : 0);
 
   var id = this.client_.addTask(task);
   res.json({'id': id, 'postion': this.client_.jobQueue.length});
@@ -411,7 +413,7 @@ Agent.prototype.scheduleProcessDone_ = function(ipcMsg, job) {
           fs.readFile, ipcMsg.videoFile).then(function(buffer) {
         job.resultFiles.push(new wpt_client.ResultFile(
             wpt_client.ResultFile.ContentType.IMAGE,
-            'video.avi', 'video/avi', buffer));
+            'video.avi', buffer));
       }, function() { // ignore errors?
       });
       process_utils.scheduleFunction(this.app_, 'Delete video file',
@@ -430,7 +432,7 @@ Agent.prototype.scheduleProcessDone_ = function(ipcMsg, job) {
  */
 Agent.prototype.startJobRun_ = function(job) {
   'use strict';
-  job.isCacheWarm = !!this.wdServer_;
+//  job.isCacheWarm = !!this.wdServer_;
 //  job.isCacheWarm = false;
   logger.info('Running job %s run %d/%d cacheWarm=%s',
       job.id, job.runNumber, job.runs, job.isCacheWarm);
@@ -585,6 +587,7 @@ Agent.prototype.jobTimeout_ = function(job) {
       this.wdServer_.send({cmd: 'abort'});
     }.bind(this));
   }
+  job.task.success = false;
   this.scheduleCleanup_();
   this.scheduleNoFault_('Timed out job finished',
       job.runFinished.bind(job, /*isRunFinished=*/true));
@@ -653,7 +656,7 @@ if (require.main === module) {
   try {
     exports.main(nopt(knownOpts, {}, process.argv, 2));
   } catch (e) {
-    console.log(e);
+    logger.error('%j', e);
     process.exit(-1);
   }
 }

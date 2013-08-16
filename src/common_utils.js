@@ -47,6 +47,10 @@ exports.task2Html = function(task) {
   return buf.join('\n');
 }
 
+exports.cloneObject = function(oldObject) {
+  return JSON.parse(JSON.stringify(oldObject));
+}
+
 exports.timestamp2Str = function(ts) {
   return moment(ts * 1000).format('YYYY-MM-DD HH:mm:ss');
 }
