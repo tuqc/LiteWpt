@@ -79,7 +79,7 @@ start() {
   fi
 
   echo 'Start agent...'
-  nohup $NODE ${ROOT_DIR}/src/agent_main.js ${cmd_arg} ${opt_args} 2>&1 >$std_file &
+  $NODE ${ROOT_DIR}/src/agent_main.js ${cmd_arg} ${opt_args} 2>&1 </dev/null >$std_file &
   echo $! > $lock_file
 }
 
@@ -89,7 +89,7 @@ start_xvfb() {
     echo 'Xvfb already running.'
   else
     echo 'Start Xvfb...'
-    nohup Xvfb :99 -screen 0 1024x768x24 2>&1 >/dev/null &  
+    Xvfb :99 -screen 0 1024x768x24 2>&1 </dev/null >/dev/null &  
   fi
 }
 
@@ -127,6 +127,7 @@ case "$CMD" in
           stop_xvfb
           ;;
         *)
-            echo $"Usage: $0 {start|stop|restart|kill|status}"
-            exit 1
+          echo $"Usage: $0 {start|stop|restart|kill|status}"
+          exit 1
 esac
+exit 0
