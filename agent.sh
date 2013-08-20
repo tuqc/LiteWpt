@@ -118,6 +118,7 @@ case "$CMD" in
             ;;
         restart)
             stop
+            sleep 2
             start
             ;;                 
         start_xvfb)

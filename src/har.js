@@ -199,9 +199,11 @@ Page.prototype.getHAR = function () {
       'pageTimings': {
         'onContentLoad': loadTime,
         'onLoad': loadTime,
-        '_loadTime': loadTime,
-        '_TTFB': ttfb,
-      }
+      },
+      '_loadTime': loadTime,
+      '_docTime': loadTime,
+      '_fullyLoaded': loadTime,
+      '_TTFB': ttfb,
     },
     'entries': []
   };
@@ -221,7 +223,6 @@ Page.prototype.getHAR = function () {
 
     // skip incomplete entries
     if (!entry.responseEvent) {
-      continue;
       entry.responseEvent = {};
       entry.responseEvent.response = {
           'status': 12999,
@@ -243,13 +244,14 @@ Page.prototype.getHAR = function () {
           },
           'headersText': '',
           'requestHeaders': {},
+          'statusText': '',
       }
     }
     if (!entry.responseFinished) {
       entry.responseFinished = this.loadEndTimestamp;
     }
 
-    // skip entries with no timing information (it's optional)    
+    // skip entries with no timing information (it's optional)
     var timing = entry.responseEvent.response.timing;
     //var timing = entry.responseEvent.response.timing;
     if (!timing) continue;
@@ -344,6 +346,10 @@ Page.prototype.getHAR = function () {
           'ssl': ssl,
         },
         '_ttfb_ms': ttfb,
+        '_dns_ms': dns,
+        '_connect_ms': connect,
+        '_load_ms': totalTime,
+        '_all_ms': totalTime,
         '_full_url': entry.requestEvent.request.url,
         '_host': parseHost(entry.requestEvent.request.url),
     });
