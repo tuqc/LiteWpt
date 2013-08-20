@@ -26,6 +26,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
+var async = require('async');
 var child_process = require('child_process');
 var common_utils = require('common_utils');
 var dns = require('dns');
@@ -118,17 +119,17 @@ Agent.prototype.run = function() {
   this.httpServer.use('/archive',express.directory(this.client_.resultDir));
 
   console.log('Start HTTP server with port=' + this.httpPort);
-  this.httpServer.listen(this.httpPort);  
+  this.httpServer.listen(this.httpPort);
   this.client_.run();
 };
 
 Agent.prototype.healthz = function(req, res) {
-  res.set('Content-Type', 'text/plain');  
+  res.set('Content-Type', 'text/plain');
   res.send('ok');
 }
 
 Agent.prototype.varz = function(req, res) {
-  res.set('Content-Type', 'text/plain');  
+  res.set('Content-Type', 'text/plain');
   res.send('ok');
 }
 
@@ -137,18 +138,33 @@ Agent.prototype.resolveIP = function(req, res) {
   if (!host) {
     res.send(500, '');
   }
-  dns.resolve4(host, function (err, addresses) {
-    if (err || (!addresses)) {
-      res.send(500, '');
-    } else {
-      res.send(addresses[0]);
+
+  var hostList = host.trim().split(',');
+  var resolveHost = function(host, callback) {
+     dns.resolve4(host, function (err, addresses) {
+      if (err || (!addresses)) {
+        callback(err, null);
+      } else {
+        callback(null, [host, addresses[0]]);
+      }
+    });
+  };
+
+  async.map(hostList, resolveHost, function(err, results) {
+    var resolvedResult = {};
+    for (var i in results) {
+      var pair = results[i];
+      if (pair) {
+        resolvedResult[pair[0]] = pair[1];
+      }
     }
+    res.json(resolvedResult);
   });
 }
 
 Agent.prototype.showCounter = function(req, res) {
   var counter = req.params.counter;
-  res.set('Content-Type', 'text/plain');  
+  res.set('Content-Type', 'text/plain');
   if (counter == 'pending_tasks') {
     res.send(this.client_.jobQueue.length);
   } else {
@@ -214,7 +230,7 @@ Agent.prototype.submitTask = function(req, res) {
     for (var i in this.client_.jobQueue) {
       var t = this.client_.jobQueue[i].task;
       if (t.gid && t.gid === task.gid) {
-        return res.json(500, {'message': 'Duplicate gid.'});        
+        return res.json(500, {'message': 'Duplicate gid.'});
       }
     }
   }
@@ -236,7 +252,7 @@ Agent.prototype.submitTask = function(req, res) {
   task.isCacheWarm = (task.isCacheWarm ? parseInt(task.isCacheWarm) : 0);
 
   var id = this.client_.addTask(task);
-  res.json({'id': id, 'postion': this.client_.jobQueue.length});
+  res.json({'id': id, 'position': this.client_.jobQueue.length});
 }
 
 Agent.prototype.showTaskStatus = function(req, res) {
@@ -245,7 +261,7 @@ Agent.prototype.showTaskStatus = function(req, res) {
   var id = req.params.id;
   if (this.client_.currentJob_ && this.client_.currentJob_.id === id) {
     return res.json({'status': 'running'});
-  } 
+  }
   for (var i in this.client_.jobQueue) {
     var job = this.client_.jobQueue[i];
     if (job.id === id) {
