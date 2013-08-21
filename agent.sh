@@ -103,6 +103,7 @@ stop_xvfb() {
 case "$CMD" in
         start)
             start
+            sleep 2
             status
             ;;         
         stop)

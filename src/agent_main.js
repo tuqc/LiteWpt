@@ -118,6 +118,14 @@ Agent.prototype.run = function() {
   this.httpServer.use('/archive', express.static(this.client_.resultDir));
   this.httpServer.use('/archive',express.directory(this.client_.resultDir));
 
+  process.on('uncaughtException', function(err) {
+    console.error(err);
+    if(err.errno === 'EADDRINUSE' || err.errno == 'EACCES') {
+      console.error('Http server run failed: ' + err.errno);
+      process.exit(1);
+    }
+  });
+
   console.log('Start HTTP server with port=' + this.httpPort);
   this.httpServer.listen(this.httpPort);
   this.client_.run();
