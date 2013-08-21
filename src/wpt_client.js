@@ -358,8 +358,10 @@ exports.Client = Client;
  */
 Client.prototype.onUncaughtException_ = function(e) {
   'use strict';
-  logger.critical('Unhandled exception in the client: %s\n%s', e, e.stack);
-  logger.debug('%s', e.stack);
+  logger.critical('Unhandled exception in the client: %s', e);
+  if (e) {
+    logger.debug('%s', e.stack);
+  }
   if (this.handlingUncaughtException_) {
     logger.critical(
         'Unhandled exception while handling another unhandled exception: %s',
@@ -373,7 +375,9 @@ Client.prototype.onUncaughtException_ = function(e) {
         this.currentJob_.id);
     // Prevent an infinite loop for an exception while submitting job results.
     this.handlingUncaughtException_ = e;
-    this.currentJob_.error = e.message;
+    if (e) {
+      this.currentJob_.error = e.message;
+    }
     this.currentJob_.runFinished(/*isRunFinished=*/true);
   } else {
     logger.critical('Unhandled exception outside of job processing');
