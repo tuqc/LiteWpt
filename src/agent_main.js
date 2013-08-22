@@ -120,7 +120,7 @@ Agent.prototype.run = function() {
 
   process.on('uncaughtException', function(err) {
     console.error(err);
-    if(err.errno === 'EADDRINUSE' || err.errno == 'EACCES') {
+    if(err && (err.errno == 'EADDRINUSE' || err.errno == 'EACCES')) {
       console.error('Http server run failed: ' + err.errno);
       process.exit(1);
     }
