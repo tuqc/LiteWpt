@@ -38,6 +38,7 @@ var mkdirp = require('mkdirp');
 var moment = require('moment');
 var multipart = require('multipart');
 var path = require('path');
+var pcap = require("pcap");
 var url = require('url');
 var util = require('util');
 var Zip = require('node-zip');
@@ -119,6 +120,8 @@ function Job(client, task) {
   this.resultFiles = [];
   this.zipResultFiles = {};
   this.error = undefined;
+
+//  this.startTCPDump();
 }
 /** Public class. */
 exports.Job = Job;
@@ -138,6 +141,33 @@ Job.prototype.processHAR = function(harJson) {
   } else {
     this.task['success'] = false;
   }
+}
+
+Job.prototype.startTCPDump = function() {
+  this.pcapSession = pcap.createSession();
+
+  var resultDir = this.client_.getJobResult(this.id).getResultDir();
+  var dumpFile = resultDir + '/' + 'tcpdump.txt';
+
+  // Don't care when it created.
+  mkdirp(resultDir, function(err){});
+
+  this.pcapSession.on('packet', (function (rawPacket) {
+    var message = undefined;
+    try {
+      var packet = pcap.decode.packet(rawPacket);
+      message = pcap.print.packet(packet);        
+    } catch (err) {
+      logger.error('%j', err);
+    }
+    if (!message) return;
+    var filepath = '';
+    fs.appendFile(dumpFile, message, function (err) {
+      if (err) {
+        logger.error('%j', err);
+      }
+    });
+  }).bind(this));
 }
 
 /**

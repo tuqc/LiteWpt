@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+
+/*global process require exports */
+
+var util = require('util'),
+    pcap = require("pcap"), pcap_session;
+    
+if (process.argv.length > 4) {
+    util.error("usage: simple_capture interface filter");
+    util.error("Examples: ");
+    util.error('  simple_capture "" "tcp port 80"');
+    util.error('  simple_capture eth1 ""');
+    util.error('  simple_capture lo0 "ip proto \\tcp and tcp port 80"');
+    process.exit(1);
+}
+
+pcap_session = pcap.createSession(process.argv[2], process.argv[3]);
+
+// libpcap's internal version numnber
+util.puts(pcap.lib_version);
+
+// Print all devices, currently listening device prefixed with an asterisk
+pcap_session.findalldevs().forEach(function (dev) {
+    if (pcap_session.device_name === dev.name) {
+        util.print("* ");
+    }
+    util.print(dev.name + " ");
+    if (dev.addresses.length > 0) {
+        dev.addresses.forEach(function (address) {
+            util.print(address.addr + "/" + address.netmask);
+        });
+        util.print("\n");
+    } else {
+        util.print("no address\n");
+    }
+});
+
+// Listen for packets, decode them, and feed the simple printer.  No tricks.
+pcap_session.on('packet', function (raw_packet) {
+    var packet = pcap.decode.packet(raw_packet);
+    util.puts(pcap.print.packet(packet));
+});
