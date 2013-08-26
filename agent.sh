@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# export DISPLAY=:99
+export DISPLAY=:99
 export ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export OS=`uname -ms`
 # Use the latest WebDriver javascript
