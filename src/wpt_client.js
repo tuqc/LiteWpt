@@ -62,6 +62,7 @@ var DEFAULT_JOB_TIMEOUT = 60000;
 /** Allow test access. */
 exports.NO_JOB_PAUSE = 5000;
 var MAX_RUNS = 1000;  // Sanity limit
+var MAX_TCP_DUMP_LINE = 100000; // Sanity limit
 
 
 /**
@@ -121,7 +122,8 @@ function Job(client, task) {
   this.zipResultFiles = {};
   this.error = undefined;
 
-//  this.startTCPDump();
+  this.tcpFilterPatterns = [];
+  this.startTCPDump();
 }
 /** Public class. */
 exports.Job = Job;
@@ -145,6 +147,7 @@ Job.prototype.processHAR = function(harJson) {
 
 Job.prototype.startTCPDump = function() {
   this.pcapSession = pcap.createSession();
+  this.tcpDumpLineNum = 0;
 
   var resultDir = this.client_.getJobResult(this.id).getResultDir();
   var dumpFile = resultDir + '/' + 'tcpdump.txt';
@@ -153,21 +156,40 @@ Job.prototype.startTCPDump = function() {
   mkdirp(resultDir, function(err){});
 
   this.pcapSession.on('packet', (function (rawPacket) {
+    if (this.tcpDumpLineNum > MAX_TCP_DUMP_LINE) {
+      logger.error('TCPDump max line exceed %s', this.tcpDumpLineNum);
+      return;
+    }
     var message = undefined;
     try {
       var packet = pcap.decode.packet(rawPacket);
-      message = pcap.print.packet(packet);        
+      message = pcap.print.packet(packet);
+      var dateStr = moment().format('HH:mm:ss');
+      if (this.tcpFilterPatterns) {
+        for (var i = 0; i < this.tcpFilterPatterns.length; ++i) {
+          var pattern = this.tcpFilterPatterns[i];
+          if (message.indexOf(pattern) >= 0) return;
+        }
+      }
+      message = dateStr + ' ' + message + '\n';
     } catch (err) {
       logger.error('%j', err);
     }
     if (!message) return;
-    var filepath = '';
+    this.tcpDumpLineNum += 1;
     fs.appendFile(dumpFile, message, function (err) {
       if (err) {
         logger.error('%j', err);
       }
     });
   }).bind(this));
+}
+
+Job.prototype.stopTCPDump = function() {
+  if (this.pcapSession) {
+    this.pcapSession.removeAllListeners('packet');
+    this.pcapSession = undefined;
+  }
 }
 
 /**
@@ -178,6 +200,7 @@ Job.prototype.startTCPDump = function() {
 Job.prototype.runFinished = function(isRunFinished) {
   'use strict';
   if (isRunFinished) {
+    this.stopTCPDump();
     this.task['endTimestamp'] = moment().unix();
     this.client_.finishedTasks.push(common_utils.cloneObject(this.task));
     if (this.client_.finishedTasks.length > 1000) {

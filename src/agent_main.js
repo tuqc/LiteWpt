@@ -612,6 +612,7 @@ Agent.prototype.jobTimeout_ = function(job) {
     }.bind(this));
   }
   job.task.success = false;
+  job.stopTCPDump();
   this.scheduleCleanup_();
   this.scheduleNoFault_('Timed out job finished',
       job.runFinished.bind(job, /*isRunFinished=*/true));
