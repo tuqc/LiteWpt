@@ -147,16 +147,10 @@ Job.prototype.processHAR = function(harJson) {
 
 Job.prototype.startTCPDump = function() {
   this.pcapSession = pcap.createSession();
-  this.tcpDumpLineNum = 0;
-
-  var resultDir = this.client_.getJobResult(this.id).getResultDir();
-  var dumpFile = resultDir + '/' + 'tcpdump.txt';
-
-  // Don't care when it created.
-  mkdirp(resultDir, function(err){});
+  this.pcapBuffer = [];
 
   this.pcapSession.on('packet', (function (rawPacket) {
-    if (this.tcpDumpLineNum > MAX_TCP_DUMP_LINE) {
+    if (this.pcapBuffer.length > MAX_TCP_DUMP_LINE) {
       logger.error('TCPDump max line exceed %s', this.tcpDumpLineNum);
       return;
     }
@@ -171,17 +165,13 @@ Job.prototype.startTCPDump = function() {
           if (message.indexOf(pattern) >= 0) return;
         }
       }
-      message = dateStr + ' ' + message + '\n';
+      message = dateStr + ' ' + message;
+      if (message) {
+        this.pcapBuffer.push(message);
+      }
     } catch (err) {
       logger.error('%j', err);
     }
-    if (!message) return;
-    this.tcpDumpLineNum += 1;
-    fs.appendFile(dumpFile, message, function (err) {
-      if (err) {
-        logger.error('%j', err);
-      }
-    });
   }).bind(this));
 }
 
@@ -189,6 +179,10 @@ Job.prototype.stopTCPDump = function() {
   if (this.pcapSession) {
     this.pcapSession.removeAllListeners('packet');
     this.pcapSession = undefined;
+    this.resultFiles.push(
+        new ResultFile(ResultFile.ContentType.TEXT,
+                      'tcpdump.txt', this.pcapBuffer.join('\n')));
+    this.pcapBuffer = [];
   }
 }
 
