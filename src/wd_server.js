@@ -904,8 +904,7 @@ WebDriverServer.prototype.onUncaughtException_ = function(e) {
 WebDriverServer.prototype.scheduleStop = function() {
   'use strict';
   // Stop handling uncaught exceptions
-  exports.process.removeListener('uncaughtException',
-      this.uncaughtExceptionHandler_);
+  exports.process.removeAllListeners('uncaughtException');
   if (this.driver_) {
     // onAfterDriverAction resets this.driver_ and this.testStartTime_.
     logger.debug('scheduling driver.quit()');
