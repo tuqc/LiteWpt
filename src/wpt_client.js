@@ -207,9 +207,9 @@ Job.prototype.runFinished = function(isRunFinished) {
     var jobResult = new JobResult(this.id, this.client_.resultDir);
 
     jobResult.writeResult(this.resultFiles, (function(){
+      this.resultFiles = [];
       this.client_.finishRun_(this, isRunFinished);
     }).bind(this));
-
   } else {
     this.client_.finishRun_(this, isRunFinished);
   }
@@ -250,22 +250,25 @@ JobResult.prototype.writeResult = function(resultFiles, callback) {
     var filePath = this.getResultFile(resultFile.fileName);
     fs.writeFile(filePath, resultFile.content, function(err) {
       fn(err);
+      resultFile.content = undefined;
     });
   }).bind(this);
 
 
-  mkdirp(this.path, function(err){
+  mkdirp(this.path, (function(err){
     if (err) {
       logger.error(err);
     }
     // Write result files
     async.each(resultFiles, writeFile, function(err){
-      if (err) throw err;
+      if (err) {
+        logger.error('Write file error. %s', err);
+      }
       if(callback){
         callback();
       }
     });
-  });
+  }).bind(this));
 }
 
 JobResult.prototype.getHAR = function(resultFiles) {
