@@ -123,7 +123,6 @@ function Job(client, task) {
   this.error = undefined;
 
   this.tcpFilterPatterns = [];
-  this.startTCPDump();
 }
 /** Public class. */
 exports.Job = Job;
@@ -146,10 +145,8 @@ Job.prototype.processHAR = function(harJson) {
 }
 
 Job.prototype.startTCPDump = function() {
-  this.pcapSession = pcap.createSession();
   this.pcapBuffer = [];
-
-  this.pcapSession.on('packet', (function (rawPacket) {
+  this.pcapListener = (function (rawPacket) {
     if (this.pcapBuffer.length > MAX_TCP_DUMP_LINE) {
       logger.error('TCPDump max line exceed %s', this.tcpDumpLineNum);
       return;
@@ -172,13 +169,14 @@ Job.prototype.startTCPDump = function() {
     } catch (err) {
       logger.error('%j', err);
     }
-  }).bind(this));
+  }).bind(this);
+  this.client_.pcapSession.on('packet', this.pcapListener);
 }
 
 Job.prototype.stopTCPDump = function() {
-  if (this.pcapSession) {
-    this.pcapSession.removeAllListeners('packet');
-    this.pcapSession = undefined;
+  if (this.pcapListener) {
+    this.client_.pcapSession.removeListener('packet', this.pcapListener);
+    this.pcapListener = undefined;
     this.resultFiles.push(
         new ResultFile(ResultFile.ContentType.TEXT,
                       'tcpdump.txt', this.pcapBuffer.join('\n')));
@@ -393,6 +391,8 @@ function Client(args) {
   logger.info('Write result data to %s', this.resultDir);
 
   exports.process.on('uncaughtException', this.onUncaughtException_.bind(this));
+  
+  this.pcapSession = pcap.createSession();
 
   logger.extra('Created Client (urlPath=%s): %j', urlPath, this);
 }

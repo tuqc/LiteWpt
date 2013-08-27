@@ -461,6 +461,7 @@ Agent.prototype.startJobRun_ = function(job) {
   logger.info('Running job %s run %d/%d cacheWarm=%s',
       job.id, job.runNumber, job.runs, job.isCacheWarm);
   if (!this.wdServer_) {
+    job.startTCPDump();
     this.trafficShaper_.scheduleStart(
         job.task.bwIn, job.task.bwOut, job.task.latency, job.task.plr);
     this.startWdServer_();
