@@ -191,8 +191,8 @@ Job.prototype.stopTCPDump = function() {
  */
 Job.prototype.runFinished = function(isRunFinished) {
   'use strict';
-  if (isRunFinished) {
-    this.stopTCPDump();
+  this.stopTCPDump();
+  if (isRunFinished && this === this.client_.currentJob_) {
     this.task['endTimestamp'] = moment().unix();
     this.client_.finishedTasks.push(common_utils.cloneObject(this.task));
     if (this.client_.finishedTasks.length > 1000) {
@@ -557,7 +557,6 @@ Client.prototype.finishRun_ = function(job, isRunFinished) {
   } else {  // Belated finish of an old already timed-out job
     logger.error('Timed-out job finished, but too late: %s', job.id);
     this.handlingUncaughtException_ = undefined;
-    this.emit('done');
   }
 };
 
