@@ -102,6 +102,7 @@ Agent.prototype.run = function() {
 
   // Http paths
   this.httpServer.use(express.bodyParser());
+  this.httpServer.use(express.compress());
   this.httpServer.get('/', this.showSummary.bind(this));
   this.httpServer.get('/ip', this.resolveIP.bind(this));
   this.httpServer.get('/status/:counter', this.showCounter.bind(this));
