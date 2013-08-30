@@ -159,7 +159,7 @@ Job.prototype.startTCPDumpRaw = function() {
         'tcpdump', ['-w', this.tcpdumpRawFile]);
     this.tcpdumpPid = this.tcpdumpProcess.pid;
     // Stop the tcpdump when timeout.
-    gloabl.setTimeout((function(){
+    global.setTimeout((function(){
       this.stopTCPDump();
     }).bind(this), MAX_TCP_DUMP_TIME);
 
@@ -169,7 +169,7 @@ Job.prototype.startTCPDumpRaw = function() {
 Job.prototype.stopTCPDumpRaw = function() {
   if (this.tcpdumpProcess) {
     this.tcpdumpProcess.kill('SIGTERM');
-    global.setTimeout((functuon(){
+    global.setTimeout((function(){
       if (!this.tcpdumpPid) {
         return;
       }
@@ -177,7 +177,7 @@ Job.prototype.stopTCPDumpRaw = function() {
       // Double check, kill it if process is live.
       isrunning(pid, function(err, live){
         if (live) {
-          child_process.spawn('kill', ['-9', '' + pid])
+         // child_process.spawn('kill', ['-9', '' + pid])
         }
       });
     }).bind(this), 30 * 1000);
