@@ -34,6 +34,7 @@ var events = require('events');
 var fs = require('fs');
 var har = require('har');
 var http = require('http');
+var isrunning = require('is-running')
 var logger = require('logger');
 var mkdirp = require('mkdirp');
 var moment = require('moment');
@@ -64,6 +65,8 @@ var DEFAULT_JOB_TIMEOUT = 60000;
 exports.NO_JOB_PAUSE = 5000;
 var MAX_RUNS = 1000;  // Sanity limit
 var MAX_TCP_DUMP_LINE = 100000; // Sanity limit
+//Sanity limit. Max tcp dump time to prevent too large dump file
+var MAX_TCP_DUMP_TIME = 30 * 1000;
 
 
 /**
@@ -154,12 +157,31 @@ Job.prototype.startTCPDumpRaw = function() {
   jobResult.mkdirp((function(err){
     this.tcpdumpProcess = child_process.spawn(
         'tcpdump', ['-w', this.tcpdumpRawFile]);
+    this.tcpdumpPid = this.tcpdumpProcess.pid;
+    // Stop the tcpdump when timeout.
+    gloabl.setTimeout((function(){
+      this.stopTCPDump();
+    }).bind(this), MAX_TCP_DUMP_TIME);
+
   }).bind(this));
 }
 
 Job.prototype.stopTCPDumpRaw = function() {
   if (this.tcpdumpProcess) {
     this.tcpdumpProcess.kill('SIGTERM');
+    global.setTimeout((functuon(){
+      if (!this.tcpdumpPid) {
+        return;
+      }
+      var pid = this.tcpdumpPid;
+      // Double check, kill it if process is live.
+      isrunning(pid, function(err, live){
+        if (live) {
+          child_process.spawn('kill', ['-9', '' + pid])
+        }
+      });
+    }).bind(this), 30 * 1000);
+    this.tcpdumpProcess = undefined;
   }
 }
 
