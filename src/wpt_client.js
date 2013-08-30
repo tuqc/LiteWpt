@@ -27,6 +27,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
 var async = require('async');
+var child_process = require('child_process');
 var common_utils = require('common_utils');
 var crypto = require('crypto');
 var events = require('events');
@@ -144,7 +145,28 @@ Job.prototype.processHAR = function(harJson) {
   }
 }
 
-Job.prototype.startTCPDump = function() {
+/**
+ * Start tcp dump raw binary meesgae
+ */
+Job.prototype.startTCPDumpRaw = function() {
+  var jobResult = this.client_.getJobResult(this.id);
+  this.tcpdumpRawFile = jobResult.getResultFile('tcpdump.raw');
+  jobResult.mkdirp((function(err){
+    this.tcpdumpProcess = child_process.spawn(
+        'tcpdump', ['-w', this.tcpdumpRawFile]);
+  }).bind(this));
+}
+
+Job.prototype.stopTCPDumpRaw = function() {
+  if (this.tcpdumpProcess) {
+    this.tcpdumpProcess.kill('SIGTERM');
+  }
+}
+
+/**
+ * Start tcp dump to text using node_pcap.
+ */
+Job.prototype.startTCPDumpText = function() {
   this.pcapBuffer = [];
   this.pcapListener = (function (rawPacket) {
     if (this.pcapBuffer.length > MAX_TCP_DUMP_LINE) {
@@ -173,7 +195,7 @@ Job.prototype.startTCPDump = function() {
   this.client_.pcapSession.on('packet', this.pcapListener);
 }
 
-Job.prototype.stopTCPDump = function() {
+Job.prototype.stopTCPDumpText = function() {
   if (this.pcapListener) {
     this.client_.pcapSession.removeListener('packet', this.pcapListener);
     this.pcapListener = undefined;
@@ -182,6 +204,14 @@ Job.prototype.stopTCPDump = function() {
                       'tcpdump.txt', this.pcapBuffer.join('\n')));
     this.pcapBuffer = [];
   }
+}
+
+/**
+ * Stop all tcp dump process.
+ */
+Job.prototype.stopTCPDump = function() {
+  this.stopTCPDumpRaw();
+  this.stopTCPDumpText();
 }
 
 /**
@@ -233,6 +263,17 @@ JobResult.prototype.getResultDir = function() {
                          align(date.date()), align(date.hour()),
                          this.jobID);
   return path;
+}
+
+/**
+ * Make job result directory.
+ */
+JobResult.prototype.mkdirp = function(callback) {
+  mkdirp(this.path, function(err){
+    if (!err) {
+      callback();
+    }
+  });
 }
 
 JobResult.prototype.getResultFile = function(filename) {
