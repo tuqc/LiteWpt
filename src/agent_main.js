@@ -112,6 +112,7 @@ Agent.prototype.run = function() {
   this.httpServer.get('/task/status/:id', this.showTaskStatus.bind(this));
   this.httpServer.get('/task/result/:id', this.listTaskResult.bind(this));
   this.httpServer.get('/task/result/:id/:filename', this.showTaskResult.bind(this));
+  this.httpServer.get('/task/check/:id/:filename', this.checkTaskResult.bind(this));
   this.httpServer.get('/healthz', this.healthz.bind(this));
   this.httpServer.get('/varz', this.varz.bind(this));
 
@@ -336,6 +337,24 @@ Agent.prototype.showTaskResult = function(req, res) {
     }
   }); 
 }
+
+Agent.prototype.checkTaskResult = function(req, res) {
+  'use strict';
+  var id = req.params.id;
+  var filename = req.params.filename;
+
+  var jobResult = this.client_.getJobResult(id);
+  var filepath = jobResult.getResultFile(filename);
+
+  fs.exists(filepath, function (exists) {
+    if (exists) {
+      res.json({'exist': true});
+    } else {
+      res.json(404, {'exist': false});
+    }
+  }); 
+}
+
 
 
 Agent.prototype.listTaskResult = function(req, res) {
