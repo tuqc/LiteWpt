@@ -23,6 +23,8 @@ stop() {
   else
     echo 'Not running'
   fi
+  echo 'Kill all tcpdump...'
+  killall tcpdump &>1 >/dev/null
 }
 
 

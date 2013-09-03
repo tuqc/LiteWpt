@@ -338,7 +338,6 @@ Agent.prototype.showTaskResult = function(req, res) {
   }); 
 }
 
-
 Agent.prototype.statTaskResult = function(req, res) {
   'use strict';
   var id = req.params.id;
