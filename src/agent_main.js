@@ -112,6 +112,7 @@ Agent.prototype.run = function() {
   this.httpServer.get('/task/status/:id', this.showTaskStatus.bind(this));
   this.httpServer.get('/task/result/:id', this.listTaskResult.bind(this));
   this.httpServer.get('/task/result/:id/:filename', this.showTaskResult.bind(this));
+  this.httpServer.get('/task/result/:id/:filename/stat', this.statTaskResult.bind(this));
   this.httpServer.get('/healthz', this.healthz.bind(this));
   this.httpServer.get('/varz', this.varz.bind(this));
 
@@ -197,13 +198,13 @@ Agent.prototype.showSummary = function(req, res) {
 
   buf.push('<strong>Waiting Jobs:</strong><br>');
   for (var i in this.client_.jobQueue) {
-    var job = this.client_.jobQueue[i];
-    buf.push(common_utils.task2Html(job.task) + '<br>');
+      var job = this.client_.jobQueue[i];
+      buf.push(common_utils.task2Html(job.task) + '<br>');
   }
 
   buf.push('<strong>Finished Jobs:</strong>(Recent 1000)<br>');
 
-  for (var i in this.client_.finishedTasks) {
+  for (var i = this.client_.finishedTasks.length - 1; i >= 0; --i) {
     var task = this.client_.finishedTasks[i];
     buf.push(common_utils.task2Html(task) + '<br>');
   }
@@ -335,6 +336,25 @@ Agent.prototype.showTaskResult = function(req, res) {
       res.send(404, 'Sorry, cannot find file ' + filepath);
     }
   }); 
+}
+
+
+Agent.prototype.statTaskResult = function(req, res) {
+  'use strict';
+  var id = req.params.id;
+  var filename = req.params.filename;
+
+  var jobResult = this.client_.getJobResult(id);
+  var filepath = jobResult.getResultFile(filename);
+
+  fs.stat(filepath, function (err, stats) {
+    if (err) {
+      res.json(404, {'exist': false});
+    } else {
+      res.json({'exist': true,
+                'size': stat.size});
+    }
+  });
 }
 
 
