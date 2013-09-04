@@ -356,7 +356,6 @@ Agent.prototype.statTaskResult = function(req, res) {
   });
 }
 
-
 Agent.prototype.listTaskResult = function(req, res) {
   'use strict';
   var id = req.params.id;
@@ -379,7 +378,6 @@ Agent.prototype.listTaskResult = function(req, res) {
     }
   });
 }
-
 
 /**
  * @param {string=} description debug title.
@@ -481,7 +479,7 @@ Agent.prototype.startJobRun_ = function(job) {
   logger.info('Running job %s run %d/%d cacheWarm=%s',
       job.id, job.runNumber, job.runs, job.isCacheWarm);
   if (!this.wdServer_) {
-    job.startTCPDumpRaw();
+    job.startTCPDump();
     this.trafficShaper_.scheduleStart(
         job.task.bwIn, job.task.bwOut, job.task.latency, job.task.plr);
     this.startWdServer_();

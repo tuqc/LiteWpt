@@ -32,6 +32,7 @@ var common_utils = require('common_utils');
 var crypto = require('crypto');
 var events = require('events');
 var fs = require('fs');
+var fs_extra = require('fs-extra');
 var har = require('har');
 var http = require('http');
 var isrunning = require('is-running')
@@ -40,7 +41,6 @@ var mkdirp = require('mkdirp');
 var moment = require('moment');
 var multipart = require('multipart');
 var path = require('path');
-var pcap = require("pcap");
 var url = require('url');
 var util = require('util');
 var Zip = require('node-zip');
@@ -65,8 +65,10 @@ var DEFAULT_JOB_TIMEOUT = 60000;
 exports.NO_JOB_PAUSE = 5000;
 var MAX_RUNS = 1000;  // Sanity limit
 var MAX_TCP_DUMP_LINE = 100000; // Sanity limit
-//Sanity limit. Max tcp dump time to prevent too large dump file
+// Sanity limit. Max tcp dump time to prevent too large dump file
 var MAX_TCP_DUMP_TIME = 30 * 1000;
+// Max days job data will be kept on disk.
+var MAX_JOB_KEEP_DAYS = 10; // 10 days
 
 
 /**
@@ -151,7 +153,7 @@ Job.prototype.processHAR = function(harJson) {
 /**
  * Start tcp dump raw binary meesgae
  */
-Job.prototype.startTCPDumpRaw = function() {
+Job.prototype.startTCPDump = function() {
   var jobResult = this.client_.getJobResult(this.id);
   this.tcpdumpRawFile = jobResult.getResultFile('tcpdump.raw');
   jobResult.mkdirp((function(err){
@@ -166,7 +168,10 @@ Job.prototype.startTCPDumpRaw = function() {
   }).bind(this));
 }
 
-Job.prototype.stopTCPDumpRaw = function() {
+/**
+ * Stop tcpdump process.
+ */
+Job.prototype.stopTCPDump = function() {
   if (this.tcpdumpProcess) {
     this.tcpdumpProcess.kill('SIGTERM');
     global.setTimeout((function(){
@@ -183,57 +188,6 @@ Job.prototype.stopTCPDumpRaw = function() {
     }).bind(this), 30 * 1000);
     this.tcpdumpProcess = undefined;
   }
-}
-
-/**
- * Start tcp dump to text using node_pcap.
- */
-Job.prototype.startTCPDumpText = function() {
-  this.pcapBuffer = [];
-  this.pcapListener = (function (rawPacket) {
-    if (this.pcapBuffer.length > MAX_TCP_DUMP_LINE) {
-      logger.error('TCPDump max line exceed %s', this.tcpDumpLineNum);
-      return;
-    }
-    var message = undefined;
-    try {
-      var packet = pcap.decode.packet(rawPacket);
-      message = pcap.print.packet(packet);
-      var dateStr = moment().format('HH:mm:ss');
-      if (this.tcpFilterPatterns) {
-        for (var i = 0; i < this.tcpFilterPatterns.length; ++i) {
-          var pattern = this.tcpFilterPatterns[i];
-          if (message.indexOf(pattern) >= 0) return;
-        }
-      }
-      message = dateStr + ' ' + message;
-      if (message) {
-        this.pcapBuffer.push(message);
-      }
-    } catch (err) {
-      logger.error('%j', err);
-    }
-  }).bind(this);
-  this.client_.pcapSession.on('packet', this.pcapListener);
-}
-
-Job.prototype.stopTCPDumpText = function() {
-  if (this.pcapListener) {
-    this.client_.pcapSession.removeListener('packet', this.pcapListener);
-    this.pcapListener = undefined;
-    this.resultFiles.push(
-        new ResultFile(ResultFile.ContentType.TEXT,
-                      'tcpdump.txt', this.pcapBuffer.join('\n')));
-    this.pcapBuffer = [];
-  }
-}
-
-/**
- * Stop all tcp dump process.
- */
-Job.prototype.stopTCPDump = function() {
-  this.stopTCPDumpRaw();
-  this.stopTCPDumpText();
 }
 
 /**
@@ -454,9 +408,7 @@ function Client(args) {
   logger.info('Write result data to %s', this.resultDir);
 
   exports.process.on('uncaughtException', this.onUncaughtException_.bind(this));
-  
-  this.pcapSession = pcap.createSession();
-
+    
   logger.extra('Created Client (urlPath=%s): %j', urlPath, this);
 }
 util.inherits(Client, events.EventEmitter);
@@ -518,6 +470,85 @@ Client.prototype.runNextJob = function() {
   } else {
     this.emit('nojob');
   }
+}
+
+/**
+ * Delete the old job, make sure the disk not too large.
+ */
+Client.prototype.removeOutdateJobs = function() {
+  logger.info('Start to clean jobs outdate.');
+  var dayLimit = moment().subtract('days', 7).format('YYYYMMDD');
+  var hourLimit = moment().subtract('days', 7).format('YYYYMMDDHH');
+  var rootDir = this.resultDir;
+  fs.readdir(rootDir, function(err, years) {
+    if (err) {
+     return;
+    }
+    for (var i in years) {
+     var year = years[i];
+     var yearInt = parseInt(year);
+     if (!yearInt || yearInt < 2012) {
+       return;
+     }
+     var yearDir = path.join(rootDir, year);
+     fs.readdir(yearDir, function(err, months) {
+       if (err) {
+         return;
+       }
+       for (var i in months) {
+         var month = months[i];
+         var monthInt = parseInt(month);
+         if (!(monthInt && monthInt > 0 && monthInt < 13)) {
+           return;
+         }
+         var monthDir = path.join(yearDir, month);
+         fs.readdir(monthDir, function(err, days) {
+           for (var i in days) {
+             var day = days[i];
+             var dayInt = parseInt(day);
+             if (!(dayInt && dayInt > 0 && dayInt < 32)) {
+               return;
+             }
+
+             var dayDir = path.join(monthDir, day);
+             var compareStr = year + month + day;
+             if (compareStr < dayLimit) {
+               logger.info('Delete dir %s.', dayDir);
+               fs_extra.remove(dayDir, function(err){
+                 if (err) {
+                   logger.error('Remove dir %s error.', dayDir);
+                 }
+               });
+               return;
+             }
+
+             fs.readdir(dayDir, function(err, hours){
+               if (err) return;
+               for (var i in hours) {
+                 var hour = hours[i];
+                 var hourInt = parseInt(hour);
+                 if (!(hourInt && hourInt >= 0 && hourInt < 25)) {
+                   return;
+                 }
+                 var hourDir = path.join(dayDir, hour);
+                 var compareStr = year + month + day + hour;
+                 if (compareStr < hourLimit) {
+                   logger.info('Delete dir %s.', hourDir);
+                   fs_extra.remove(hourDir, function(err){
+                     if (err) {
+                       logger.error('Remove dir %s error.', hourDir);
+                     }
+                   });
+                   return;
+                 }
+               }
+             });
+           } //end days loop
+         });
+       } //end month loop
+     });
+    } // end year loop
+    });
 }
 
 /**
@@ -802,6 +833,10 @@ Client.prototype.submitResult_ = function(job, isRunFinished, callback) {
 Client.prototype.run = function() {
   'use strict';
   var self = this;
+  // Run every hour.
+  global.setInterval((function() {
+    this.removeOutdateJobs();
+  }).bind(this), 60 * 60 * 1000);
   this.on('nojob', function() {
     logger.info('No more job, pause ' + exports.NO_JOB_PAUSE);
     global.setTimeout(function() {
