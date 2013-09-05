@@ -351,7 +351,7 @@ Agent.prototype.statTaskResult = function(req, res) {
       res.json(404, {'exist': false});
     } else {
       res.json({'exist': true,
-                'size': stat.size});
+                'size': stats.size});
     }
   });
 }
