@@ -477,8 +477,9 @@ Client.prototype.runNextJob = function() {
  */
 Client.prototype.removeOutdateJobs = function() {
   logger.info('Start to clean jobs outdate.');
-  var dayLimit = moment().subtract('days', MAX_JOB_KEEP_DAYS).format('YYYYMMDD');
-  var hourLimit = moment().subtract('days', MAX_JOB_KEEP_DAYS).format('YYYYMMDDHH');
+  var keepDays = MAX_JOB_KEEP_DAYS;
+  var dayLimit = moment().subtract('days', keepDays).format('YYYYMMDD');
+  var hourLimit = moment().subtract('days', keepDays).format('YYYYMMDDHH');
   logger.info('Start delete jobs before %s', hourLimit);
   var rootDir = this.resultDir;
 
