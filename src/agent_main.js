@@ -330,12 +330,12 @@ Agent.prototype.showTaskResult = function(req, res) {
       if (req.query.view) {
         res.sendfile(filepath);
       } else {
-        res.download(filepath);     
-      }    
+        res.download(filepath);
+      }
     } else {
       res.send(404, 'Sorry, cannot find file ' + filepath);
     }
-  }); 
+  });
 }
 
 Agent.prototype.statTaskResult = function(req, res) {

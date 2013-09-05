@@ -408,7 +408,7 @@ function Client(args) {
   logger.info('Write result data to %s', this.resultDir);
 
   exports.process.on('uncaughtException', this.onUncaughtException_.bind(this));
-    
+
   logger.extra('Created Client (urlPath=%s): %j', urlPath, this);
 }
 util.inherits(Client, events.EventEmitter);
@@ -477,78 +477,81 @@ Client.prototype.runNextJob = function() {
  */
 Client.prototype.removeOutdateJobs = function() {
   logger.info('Start to clean jobs outdate.');
-  var dayLimit = moment().subtract('days', 7).format('YYYYMMDD');
-  var hourLimit = moment().subtract('days', 7).format('YYYYMMDDHH');
+  var dayLimit = moment().subtract('days', MAX_JOB_KEEP_DAYS).format('YYYYMMDD');
+  var hourLimit = moment().subtract('days', MAX_JOB_KEEP_DAYS).format('YYYYMMDDHH');
+  logger.info('Start delete jobs before %s', hourLimit);
   var rootDir = this.resultDir;
-  fs.readdir(rootDir, function(err, years) {
-    if (err) {
-     return;
-    }
-    for (var i in years) {
-     var year = years[i];
-     var yearInt = parseInt(year);
-     if (!yearInt || yearInt < 2012) {
-       return;
-     }
-     var yearDir = path.join(rootDir, year);
-     fs.readdir(yearDir, function(err, months) {
-       if (err) {
-         return;
-       }
-       for (var i in months) {
-         var month = months[i];
-         var monthInt = parseInt(month);
-         if (!(monthInt && monthInt > 0 && monthInt < 13)) {
-           return;
-         }
-         var monthDir = path.join(yearDir, month);
-         fs.readdir(monthDir, function(err, days) {
-           for (var i in days) {
-             var day = days[i];
-             var dayInt = parseInt(day);
-             if (!(dayInt && dayInt > 0 && dayInt < 32)) {
-               return;
-             }
 
-             var dayDir = path.join(monthDir, day);
-             var compareStr = year + month + day;
-             if (compareStr < dayLimit) {
-               logger.info('Delete dir %s.', dayDir);
-               fs_extra.remove(dayDir, function(err){
-                 if (err) {
-                   logger.error('Remove dir %s error.', dayDir);
-                 }
-               });
-               return;
-             }
-
-             fs.readdir(dayDir, function(err, hours){
-               if (err) return;
-               for (var i in hours) {
-                 var hour = hours[i];
-                 var hourInt = parseInt(hour);
-                 if (!(hourInt && hourInt >= 0 && hourInt < 25)) {
-                   return;
-                 }
-                 var hourDir = path.join(dayDir, hour);
-                 var compareStr = year + month + day + hour;
-                 if (compareStr < hourLimit) {
-                   logger.info('Delete dir %s.', hourDir);
-                   fs_extra.remove(hourDir, function(err){
-                     if (err) {
-                       logger.error('Remove dir %s error.', hourDir);
-                     }
-                   });
-                   return;
-                 }
-               }
-             });
-           } //end days loop
-         });
-       } //end month loop
-     });
-    } // end year loop
+  /**
+   * Delete directory recursively, similar to rm -rf.
+  */
+  var deleteDir = function(destDir) {
+    logger.info('Delete dir %s', destDir);
+    fs_extra.remove(destDir, function(err){
+      if (err) {
+        logger.error('Delete dir %s error: %s', destDir, err);
+      } else {
+        logger.info('Delete dir %s success.', destDir);
+      }
     });
+  }
+
+  /**
+   * Scan directory to decide to delete which derectories.
+   * @param {Array} dirNames directroies names relative to root
+   *        directory.
+   */
+  var processDir = function(dirNames) {
+    var dir = rootDir;
+    for (var i in dirNames) {
+      var name = dirNames[i];
+      var intVal = parseInt(name);
+      // Check year dir name
+      if (i == 0 && !(intVal && intVal > 2012))
+        return;
+      // Check month dir name
+      if (i == 1 && !(intVal && intVal >= 1 && intVal <= 12))
+        return;
+      // Check day dir name
+      if (i == 2 && !(intVal && intVal >= 1 && intVal <= 31))
+        return;
+      // Check hour dir name
+      if (i == 3 && !(intVal && intVal >= 0 && intVal <= 24))
+        return;
+      dir = path.join(dir, dirNames[i]);
+    }
+    logger.info('Start to scan %s', dir);
+
+    var compareStr = dirNames.join('');
+    if (dirNames.length == 3) {
+      //Check if day dir outdate
+      if (compareStr < dayLimit) {
+        deleteDir(dir);
+        return;
+      } else if (compareStr > dayLimit) {
+        // Ignore day more than day limit
+        return;
+      }
+    } else if (dirNames.length == 4) {
+      if (compareStr < hourLimit) {
+        deleteDir(dir);
+      }
+      return;
+    }
+
+    fs.readdir(dir, function(err, filenames) {
+      if (err) return;
+      for (var i in filenames) {
+        var filename = filenames[i];
+        var subDirNames = dirNames.slice(0);
+        subDirNames.push(filename);
+        processDir(subDirNames);
+      }
+    });
+  };
+
+  // Do it.
+  processDir([]);
 }
 
 /**
@@ -833,6 +836,8 @@ Client.prototype.submitResult_ = function(job, isRunFinished, callback) {
 Client.prototype.run = function() {
   'use strict';
   var self = this;
+  // Delete old jobs.
+  this.removeOutdateJobs();
   // Run every hour.
   global.setInterval((function() {
     this.removeOutdateJobs();
