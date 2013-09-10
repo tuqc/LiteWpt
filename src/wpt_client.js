@@ -68,7 +68,7 @@ var MAX_TCP_DUMP_LINE = 100000; // Sanity limit
 // Sanity limit. Max tcp dump time to prevent too large dump file
 var MAX_TCP_DUMP_TIME = 30 * 1000;
 // Max days job data will be kept on disk.
-var MAX_JOB_KEEP_DAYS = 10; // 10 days
+var MAX_JOB_KEEP_DAYS = 5; // 5 days
 
 
 /**
