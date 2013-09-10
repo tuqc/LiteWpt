@@ -173,7 +173,7 @@ BrowserLocalChrome.prototype.scheduleGetCapabilities = function() {
         webdriver: (!!this.chromedriver_),
         'wkrdp.Page.captureScreenshot': true,  // TODO(klm): check before-26.
         'wkrdp.Network.clearBrowserCache': true,
-        'wkrdp.Network.clearBrowserCookies': true
+        'wkrdp.Network.clearBrowserCookies': false
       };
   }.bind(this));
 };
