@@ -198,7 +198,7 @@ Job.prototype.stopTCPDump = function() {
  */
 Job.prototype.runFinished = function(isRunFinished) {
   'use strict';
-  if (job.tcpdump) this.stopTCPDump();
+  if (this.tcpdump) this.stopTCPDump();
   if (isRunFinished && this === this.client_.currentJob_) {
     this.task['endTimestamp'] = moment().unix();
     this.client_.finishedTasks.push(common_utils.cloneObject(this.task));
