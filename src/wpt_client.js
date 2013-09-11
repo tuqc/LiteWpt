@@ -124,6 +124,7 @@ function Job(client, task) {
   }
   this.isFirstViewOnly = !!firstViewOnly;
   this.isCacheWarm = !!task.isCacheWarm;
+  this.tcpdump = !!task.tcpdump;
   this.resultFiles = [];
   this.zipResultFiles = {};
   this.error = undefined;
@@ -197,7 +198,7 @@ Job.prototype.stopTCPDump = function() {
  */
 Job.prototype.runFinished = function(isRunFinished) {
   'use strict';
-  this.stopTCPDump();
+  if (job.tcpdump) this.stopTCPDump();
   if (isRunFinished && this === this.client_.currentJob_) {
     this.task['endTimestamp'] = moment().unix();
     this.client_.finishedTasks.push(common_utils.cloneObject(this.task));

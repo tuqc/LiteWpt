@@ -13,6 +13,9 @@ exports.task2Html = function(task) {
               '<font color="green">Success</font>':
               '<font color="red">Failed</font>'));
   }
+  if (task.tcpdump) {
+    buf.push('TCPDump: ' + !!task.tcpdump);
+  }
   if (task.submitTimestamp) {
       buf.push('Submit:  ' +
                exports.timestamp2Str(task.submitTimestamp));

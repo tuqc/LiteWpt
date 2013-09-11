@@ -191,18 +191,25 @@ Agent.prototype.showSummary = function(req, res) {
            '</strong>; <strong>' + this.startDate.fromNow() + '</strong><br>');
   buf.push('Server current time: ' + moment().format('YYYY-MM-DD HH:mm:ss') + '<br>');
 
-  buf.push('<strong>Running Jobs:</strong><br>');
+  buf.push('<strong>Running Jobs:</strong> <a href="/static/submit.html"' +
+           ' target=_blank>Submit Test</a><br>');
   if (this.client_.currentJob_) {
     buf.push(common_utils.task2Html(this.client_.currentJob_.task) + '<br>');
   }
 
-  buf.push('<strong>Waiting Jobs:</strong><br>');
+  if (this.client_.jobQueue.length > 0) {
+    buf.push('<strong>Waiting Jobs:</strong><br>');
+  } else {
+    buf.push('<strong>Waiting Jobs:</strong> None<br>');
+  }
+
   for (var i in this.client_.jobQueue) {
       var job = this.client_.jobQueue[i];
       buf.push(common_utils.task2Html(job.task) + '<br>');
   }
 
-  buf.push('<strong>Finished Jobs:</strong>(Recent 1000)<br>');
+  buf.push('<strong>Finished Jobs:</strong>(Recent '+
+           this.client_.finishedTasks.length +')<br>');
 
   for (var i = this.client_.finishedTasks.length - 1; i >= 0; --i) {
     var task = this.client_.finishedTasks[i];
@@ -260,6 +267,7 @@ Agent.prototype.submitTask = function(req, res) {
   task.runs = (task.runs ? parseInt(task.runs) : 1);
   task.fvonly = (task.fvonly ? parseInt(task.fvonly) : 1);
   task.isCacheWarm = (task.isCacheWarm ? parseInt(task.isCacheWarm) : 0);
+  task.tcpdump = (task.tcpdump ? parseInt(task.tcpdump) : 0);
 
   var id = this.client_.addTask(task);
   res.json({'id': id, 'position': this.client_.jobQueue.length});
@@ -479,7 +487,9 @@ Agent.prototype.startJobRun_ = function(job) {
   logger.info('Running job %s run %d/%d cacheWarm=%s',
       job.id, job.runNumber, job.runs, job.isCacheWarm);
   if (!this.wdServer_) {
-    job.startTCPDump();
+    if (job.tcpdump) {
+      job.startTCPDump();
+    }
     this.trafficShaper_.scheduleStart(
         job.task.bwIn, job.task.bwOut, job.task.latency, job.task.plr);
     this.startWdServer_();
@@ -631,7 +641,7 @@ Agent.prototype.jobTimeout_ = function(job) {
     }.bind(this));
   }
   job.task.success = false;
-  job.stopTCPDump();
+  if (job.tcpdump) job.stopTCPDump();
   this.scheduleCleanup_();
   this.scheduleNoFault_('Timed out job finished',
       job.runFinished.bind(job, /*isRunFinished=*/true));
