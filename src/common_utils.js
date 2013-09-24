@@ -16,6 +16,8 @@ exports.task2Html = function(task) {
   if (task.tcpdump) {
     buf.push('TCPDump: ' + !!task.tcpdump);
   }
+  if (task.proxyPacUrl) buf.push('Proxy Pac:' + task.proxyPacUrl);
+  if (task.proxyServer) buf.push('Proxy Server:' + task.proxyServer);
   if (task.submitTimestamp) {
       buf.push('Submit:  ' +
                exports.timestamp2Str(task.submitTimestamp));

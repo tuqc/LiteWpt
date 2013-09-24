@@ -141,6 +141,8 @@ WebDriverServer.prototype.init = function(initMessage) {
   this.runNumber_ = initMessage.runNumber;
   this.screenshots_ = [];
   this.script_ = initMessage.script;
+  this.proxyPacUrl = initMessage.proxyPacUrl;
+  this.proxyServer = initMessage.proxyServer;
   this.testStartTime_ = undefined;
   this.timeoutTimer_ = undefined;
   this.timeout_ = initMessage.timeout;
@@ -720,6 +722,18 @@ WebDriverServer.prototype.connect = function() {
     platform: 'ANY',
     javascriptEnabled: true
   };
+
+  if (this.proxyPacUrl) {
+    browserCaps.proxy = {
+      proxyType: 'pac',
+      proxyAutoconfigUrl: this.proxyPacUrl
+    }
+  } else if (this.proxyServer) {
+    browserCaps.proxy = {
+      proxyType: 'manual',
+      proxyAutoconfigUrl: this.proxyServer
+    }
+  }
 
   this.app_.on(webdriver.promise.Application.EventType.UNCAUGHT_EXCEPTION,
       function() {

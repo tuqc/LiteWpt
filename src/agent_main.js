@@ -228,6 +228,8 @@ Agent.prototype.showSummary = function(req, res) {
  *   "url":"",
  *   "runs": 1,
  *   "fvonly": 0,
+ *   "proxyPacUrl": "",  //optional
+ *   "proxyServer": "",  //optional
  *   "script":"driver = new
  *      webdriver.Builder().build();driver.get('http://www.baidu.com');
  *      driver.wait(function()  { return driver.getTitle();});", };
@@ -536,6 +538,11 @@ Agent.prototype.startJobRun_ = function(job) {
         pac: pac,
         timeout: this.client_.jobTimeout - 15000  // 15 seconds to stop+submit.
       };
+    if (job.task.proxyPacUrl) {
+      message.proxyPacUrl = job.task.proxyPacUrl;
+    } else if (job.task.proxyServer) {
+      message.proxyServer = job.task.proxyServer;
+    }
     var key;
     for (key in this.flags_) {
       if (!message[key]) {
