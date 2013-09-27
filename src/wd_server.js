@@ -731,7 +731,7 @@ WebDriverServer.prototype.connect = function() {
   } else if (this.proxyServer) {
     browserCaps.proxy = {
       proxyType: 'manual',
-      proxyAutoconfigUrl: this.proxyServer
+      httpProxy: this.proxyServer
     }
   }
 
