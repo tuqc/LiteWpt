@@ -93,9 +93,11 @@ describe('agent_main', function() {
 
   it('should cleanup job on timeout', function() {
     var client = new FakeEmitterWithRun();
+    client.resultDir = './';
 
     var runFinishedSpy = sandbox.spy();
-    var fakeJob = {runFinished: runFinishedSpy};
+    var fakeJob = {runFinished: runFinishedSpy,
+                   task: {}};
 
     var agent = new agent_main.Agent(client, /*flags=*/{});
     agent.run();

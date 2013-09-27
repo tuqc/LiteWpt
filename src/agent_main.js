@@ -38,7 +38,6 @@ var moment = require('moment');
 var nopt = require('nopt');
 var process_utils = require('process_utils');
 var system_commands = require('system_commands');
-var traffic_shaper = require('traffic_shaper');
 var util = require('util');
 var webdriver = require('webdriver');
 var wpt_client = require('wpt_client');
@@ -83,7 +82,6 @@ function Agent(client, flags) {
   this.app_ = webdriver.promise.Application.getInstance();
   process_utils.injectWdAppLogging('main app', this.app_);
   this.wdServer_ = undefined;  // The wd_server child process.
-  this.trafficShaper_ = new traffic_shaper.TrafficShaper(this.app_, flags);
 
   this.client_.onStartJobRun = this.startJobRun_.bind(this);
   this.client_.onJobTimeout = this.jobTimeout_.bind(this);
@@ -492,8 +490,6 @@ Agent.prototype.startJobRun_ = function(job) {
     if (job.tcpdump) {
       job.startTCPDump();
     }
-    this.trafficShaper_.scheduleStart(
-        job.task.bwIn, job.task.bwOut, job.task.latency, job.task.plr);
     this.startWdServer_();
     this.wdServer_.on('message', function(ipcMsg) {
       logger.debug('got IPC: %s', ipcMsg.cmd);
@@ -674,7 +670,6 @@ Agent.prototype.scheduleCleanup_ = function() {
       }.bind(this));
     }.bind(this));
   }
-  this.trafficShaper_.scheduleStop();
   // TODO kill dangling child processes
 };
 

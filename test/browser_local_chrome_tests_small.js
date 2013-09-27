@@ -74,10 +74,8 @@ describe('browser_local_chrome small', function() {
     sandbox.clock.tick(webdriver.promise.Application.EVENT_LOOP_FREQUENCY * 4);
     should.equal('[]', app.getSchedule());
     should.ok(browser.isRunning());
-    should.equal('http://localhost:4444', browser.getServerUrl());
-    should.equal('http://localhost:1234/json', browser.getDevToolsUrl());
     should.ok(processSpawnStub.calledOnce);
-    processSpawnStub.assertCall(chromedriver, '-port=4444');
+    processSpawnStub.assertCall(chromedriver, '-port=' + browser.serverPort_);
     processSpawnStub.assertCall();
 
     browser.kill();
@@ -98,10 +96,11 @@ describe('browser_local_chrome small', function() {
     sandbox.clock.tick(webdriver.promise.Application.EVENT_LOOP_FREQUENCY * 4);
     should.equal('[]', app.getSchedule());
     should.ok(browser.isRunning());
-    should.equal('http://localhost:4444', browser.getServerUrl());
-    should.equal('http://localhost:1234/json', browser.getDevToolsUrl());
+    should.equal('http://localhost:' + browser.serverPort_, browser.getServerUrl());
+    should.equal('http://localhost:' + browser.devToolsPort_ + '/json',
+                 browser.getDevToolsUrl());
     should.ok(processSpawnStub.calledOnce);
-    processSpawnStub.assertCall(chromedriver, '-port=4444');
+    processSpawnStub.assertCall(chromedriver, '-port=' + browser.serverPort_);
     processSpawnStub.assertCall();
     var chromedriverProc = processSpawnStub.firstCall.returnValue;
 

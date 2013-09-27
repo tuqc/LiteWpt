@@ -258,7 +258,7 @@ describe('wd_server small', function() {
         'Page.enable',
         'Timeline.start',
         'Network.clearBrowserCache',
-        'Network.clearBrowserCookies',
+//        'Network.clearBrowserCookies',
         'Page.navigate', // to blank
         'Page.getResourceTree',
         'Page.setDocumentContent',
@@ -394,7 +394,7 @@ describe('wd_server small', function() {
         'Page.enable',
         'Timeline.start',
         'Network.clearBrowserCache',
-        'Network.clearBrowserCookies',
+//        'Network.clearBrowserCookies',
         'Page.navigate', // to blank
         'Page.getResourceTree',
         'Page.setDocumentContent',
