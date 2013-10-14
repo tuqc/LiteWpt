@@ -21,7 +21,7 @@ function parseFromMessages(messages) {
         'version': '1.0'
       },
       'pages': [],
-      'entries': [],
+      'entries': []
     }
   };
 
@@ -40,7 +40,7 @@ function parseFromMessages(messages) {
   }
   var pageCount = 0;
   var page = new Page('page_1_' + pageCount, rootUrl);
-  
+
   for (var i in messages) {
     var message = messages[i];
     page.processMessage(message);
@@ -54,7 +54,7 @@ function parseFromMessages(messages) {
   return har;
 }
 
-var Page = function (id, url, frameId) {
+var Page = function(id, url, frameId) {
   this.id = id;
   this.url = url;
   this.frameId = frameId;
@@ -64,31 +64,31 @@ var Page = function (id, url, frameId) {
   this.loadEndTimestamp = -1;
   this.originalRequestId = undefined;
   this.originalRequestStatus = undefined; // true ok; false fail
-}
+};
 
-Page.prototype.start = function () {
+Page.prototype.start = function() {
   this.startTimestamp = new Date();
-}
+};
 
-Page.prototype.domLoaded = function () {
+Page.prototype.domLoaded = function() {
   this.domLoadedTime = new Date() - this.startTimestamp;
-}
+};
 
-Page.prototype.end = function () {
+Page.prototype.end = function() {
   this.endTime = new Date() - this.startTimestamp;
-}
+};
 
-Page.prototype.isDone = function () {
+Page.prototype.isDone = function() {
   // a page is done if both Page.domContentEventFired and Page.loadEventFired
   // events are fired and the original request got a response
   return this.domLoadedTime && this.endTime &&
       this.originalRequestId &&
       typeof this.originalRequestStatus != 'undefined';
-}
+};
 
-Page.prototype.isOk = function () {
+Page.prototype.isOk = function() {
   return this.originalRequestStatus;
-}
+};
 
 // typical sequence:
 //
@@ -97,7 +97,7 @@ Page.prototype.isOk = function () {
 // Network.dataReceived      # data chunk received
 // [...]
 // Network.loadingFinished   # full response received
-Page.prototype.processMessage = function (message) {
+Page.prototype.processMessage = function(message) {
   if (!(message && message.params)) {
     return;
   }
@@ -113,7 +113,7 @@ Page.prototype.processMessage = function (message) {
       var redirectEntry = undefined;
       if (message.params.redirectResponse) {
         redirectEntry = this.entries[id];
-        redirectEntry.responseEvent = {'response': message.params.redirectResponse}
+        redirectEntry.responseEvent = {'response': message.params.redirectResponse};
         redirectEntry.responseFinished = message.params.timestamp;
       }
       this.entries[id] = {
@@ -186,9 +186,9 @@ Page.prototype.processMessage = function (message) {
     default:
       break;
   }
-}
+};
 
-Page.prototype.getHAR = function () {
+Page.prototype.getHAR = function() {
   var ttfb = Math.round(1000 * (this.firstByteTimestamp - this.startTimestamp));
   var loadTime = Math.round(1000 * (this.loadEndTimestamp - this.startTimestamp));
   var har = {
@@ -198,12 +198,12 @@ Page.prototype.getHAR = function () {
       'title': this.url,
       'pageTimings': {
         'onContentLoad': loadTime,
-        'onLoad': loadTime,
+        'onLoad': loadTime
       },
       '_loadTime': loadTime,
       '_docTime': loadTime,
       '_fullyLoaded': loadTime,
-      '_TTFB': ttfb,
+      '_TTFB': ttfb
     },
     'entries': []
   };
@@ -212,7 +212,7 @@ Page.prototype.getHAR = function () {
   for (var requestId in this.entries) {
     var entry = this.entries[requestId];
     flatedEntries.push(entry);
-    while(entry.redirectFrom) {
+    while (entry.redirectFrom) {
       flatedEntries.push(entry.redirectFrom);
       entry = entry.redirectFrom;
     }
@@ -244,8 +244,8 @@ Page.prototype.getHAR = function () {
           },
           'headersText': '',
           'requestHeaders': {},
-          'statusText': '',
-      }
+          'statusText': ''
+      };
     }
     if (!entry.responseFinished) {
       entry.responseFinished = this.loadEndTimestamp;
@@ -318,7 +318,7 @@ Page.prototype.getHAR = function () {
           'headers': requestHeaders.pairs,
           'queryString': queryString,
           'headersSize': requestHeaders.size,
-          'bodySize': entry.requestEvent.request.headers['Content-Length'] || -1,
+          'bodySize': entry.requestEvent.request.headers['Content-Length'] || -1
         },
         'response': {
           'status': entry.responseEvent.response.status,
@@ -343,7 +343,7 @@ Page.prototype.getHAR = function () {
           'send': send,
           'wait': wait,
           'receive': receive,
-          'ssl': ssl,
+          'ssl': ssl
         },
         '_ttfb_ms': ttfb,
         '_dns_ms': dns,
@@ -351,20 +351,20 @@ Page.prototype.getHAR = function () {
         '_load_ms': totalTime,
         '_all_ms': totalTime,
         '_full_url': entry.requestEvent.request.url,
-        '_host': parseHost(entry.requestEvent.request.url),
+        '_host': parseHost(entry.requestEvent.request.url)
     });
   }
 
   // Sort entry
-  har.entries.sort(function(a, b){
-    if (a.startedDateTime  < b.startedDateTime)
+  har.entries.sort(function(a, b) {
+    if (a.startedDateTime < b.startedDateTime)
       return -1;
-    else if (a.startedDateTime  > b.startedDateTime)
+    else if (a.startedDateTime > b.startedDateTime)
       return 1;
     else return 0;
   });
   return har;
-}
+};
 
 function parseQueryString(fullUrl) {
   var query = url.parse(fullUrl, true).query;

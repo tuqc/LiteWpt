@@ -45,9 +45,9 @@ function BrowserLocalChrome(app, args) {
   this.app_ = app;
   this.chromedriver_ = args.chromedriver;
   this.chrome_ = args.chrome;
-  this.serverPort_ = 4000 + Math.floor(Math.random()*1000);
+  this.serverPort_ = 4000 + Math.floor(Math.random() * 1000);
   this.serverUrl_ = undefined;
-  this.devToolsPort_ = 2000 + Math.floor(Math.random()*1000);
+  this.devToolsPort_ = 2000 + Math.floor(Math.random() * 1000);
   this.devToolsUrl_ = undefined;
   this.childProcess_ = undefined;
   this.childProcessName_ = undefined;

@@ -10,7 +10,7 @@ exports.task2Html = function(task) {
   } else {
     buf.push('ID:      ' + task.id + '   Status:' +
              (task.success ?
-              '<font color="green">Success</font>':
+              '<font color="green">Success</font>' :
               '<font color="red">Failed</font>'));
   }
   if (task.tcpdump) {
@@ -50,12 +50,12 @@ exports.task2Html = function(task) {
 
   buf.push('</pre>');
   return buf.join('\n');
-}
+};
 
 exports.cloneObject = function(oldObject) {
   return JSON.parse(JSON.stringify(oldObject));
-}
+};
 
 exports.timestamp2Str = function(ts) {
   return moment(ts * 1000).format('YYYY-MM-DD HH:mm:ss');
-}
+};

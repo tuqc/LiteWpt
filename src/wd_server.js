@@ -727,12 +727,12 @@ WebDriverServer.prototype.connect = function() {
     browserCaps.proxy = {
       proxyType: 'pac',
       proxyAutoconfigUrl: this.proxyPacUrl
-    }
+    };
   } else if (this.proxyServer) {
     browserCaps.proxy = {
       proxyType: 'manual',
       httpProxy: this.proxyServer
-    }
+    };
   }
 
   this.app_.on(webdriver.promise.Application.EventType.UNCAUGHT_EXCEPTION,

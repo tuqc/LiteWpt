@@ -58,7 +58,7 @@ var knownOpts = {
   jobTimeout: [Number, null],
   apiKey: [String, null],
   port: [Number, null],
-  resultDir: [String, null],
+  resultDir: [String, null]
 };
 
 var WD_SERVER_EXIT_TIMEOUT = 5000;  // Wait for 5 seconds before force-killing
@@ -116,11 +116,11 @@ Agent.prototype.run = function() {
 
   this.httpServer.use('/static', express.static(this.staticDir));
   this.httpServer.use('/archive', express.static(this.client_.resultDir));
-  this.httpServer.use('/archive',express.directory(this.client_.resultDir));
+  this.httpServer.use('/archive', express.directory(this.client_.resultDir));
 
   process.on('uncaughtException', function(err) {
     console.error(err);
-    if(err && (err.errno == 'EADDRINUSE' || err.errno == 'EACCES')) {
+    if (err && (err.errno == 'EADDRINUSE' || err.errno == 'EACCES')) {
       console.error('Http server run failed: ' + err.errno);
       process.exit(1);
     }
@@ -134,12 +134,12 @@ Agent.prototype.run = function() {
 Agent.prototype.healthz = function(req, res) {
   res.set('Content-Type', 'text/plain');
   res.send('ok');
-}
+};
 
 Agent.prototype.varz = function(req, res) {
   res.set('Content-Type', 'text/plain');
   res.send('ok');
-}
+};
 
 Agent.prototype.resolveIP = function(req, res) {
   var host = req.query.host;
@@ -149,7 +149,7 @@ Agent.prototype.resolveIP = function(req, res) {
 
   var hostList = host.trim().split(',');
   var resolveHost = function(host, callback) {
-     dns.resolve4(host, function (err, addresses) {
+     dns.resolve4(host, function(err, addresses) {
       if (err || (!addresses)) {
         callback(err, null);
       } else {
@@ -168,7 +168,7 @@ Agent.prototype.resolveIP = function(req, res) {
     }
     res.json(resolvedResult);
   });
-}
+};
 
 Agent.prototype.showCounter = function(req, res) {
   var counter = req.params.counter;
@@ -178,7 +178,7 @@ Agent.prototype.showCounter = function(req, res) {
   } else {
     res.send(404, 'Not found' + counter);
   }
-}
+};
 
 Agent.prototype.showSummary = function(req, res) {
 
@@ -206,8 +206,8 @@ Agent.prototype.showSummary = function(req, res) {
       buf.push(common_utils.task2Html(job.task) + '<br>');
   }
 
-  buf.push('<strong>Finished Jobs:</strong>(Recent '+
-           this.client_.finishedTasks.length +')<br>');
+  buf.push('<strong>Finished Jobs:</strong>(Recent ' +
+           this.client_.finishedTasks.length + ')<br>');
 
   for (var i = this.client_.finishedTasks.length - 1; i >= 0; --i) {
     var task = this.client_.finishedTasks[i];
@@ -218,7 +218,7 @@ Agent.prototype.showSummary = function(req, res) {
 
   res.set('Content-Type', 'text/html');
   res.send(buf.join('\n'));
-}
+};
 
 /**
  * Typicall task contain following fields
@@ -271,7 +271,7 @@ Agent.prototype.submitTask = function(req, res) {
 
   var id = this.client_.addTask(task);
   res.json({'id': id, 'position': this.client_.jobQueue.length});
-}
+};
 
 Agent.prototype.showTaskStatus = function(req, res) {
   'use strict';
@@ -298,7 +298,7 @@ Agent.prototype.showTaskStatus = function(req, res) {
   var jobResult = this.client_.getJobResult(id);
   var filepath = jobResult.getResultFile('task.json');
 
-  fs.readFile(filepath, function (err, data) {
+  fs.readFile(filepath, function(err, data) {
     if (err) {
       res.send(404, 'Not found ' + id);
     } else {
@@ -311,7 +311,7 @@ Agent.prototype.showTaskStatus = function(req, res) {
       }
     }
   });
-}
+};
 
 Agent.prototype.showTaskQueue = function(req, res) {
   'use strict';
@@ -323,7 +323,7 @@ Agent.prototype.showTaskQueue = function(req, res) {
   res.set('Content-Type', 'text/plain');
   res.send('Total tasks: ' + this.client_.jobQueue.length +
            '\n\n' + buf.join('\n\n'));
-}
+};
 
 Agent.prototype.showTaskResult = function(req, res) {
   'use strict';
@@ -333,7 +333,7 @@ Agent.prototype.showTaskResult = function(req, res) {
   var jobResult = this.client_.getJobResult(id);
   var filepath = jobResult.getResultFile(filename);
 
-  fs.exists(filepath, function (exists) {
+  fs.exists(filepath, function(exists) {
     if (exists) {
       if (req.query.view) {
         res.sendfile(filepath);
@@ -344,7 +344,7 @@ Agent.prototype.showTaskResult = function(req, res) {
       res.send(404, 'Sorry, cannot find file ' + filepath);
     }
   });
-}
+};
 
 Agent.prototype.statTaskResult = function(req, res) {
   'use strict';
@@ -354,7 +354,7 @@ Agent.prototype.statTaskResult = function(req, res) {
   var jobResult = this.client_.getJobResult(id);
   var filepath = jobResult.getResultFile(filename);
 
-  fs.stat(filepath, function (err, stats) {
+  fs.stat(filepath, function(err, stats) {
     if (err) {
       res.json(404, {'exist': false});
     } else {
@@ -362,7 +362,7 @@ Agent.prototype.statTaskResult = function(req, res) {
                 'size': stats.size});
     }
   });
-}
+};
 
 Agent.prototype.listTaskResult = function(req, res) {
   'use strict';
@@ -371,7 +371,7 @@ Agent.prototype.listTaskResult = function(req, res) {
   var jobResult = this.client_.getJobResult(id);
   var filepath = jobResult.getResultDir();
 
-  fs.readdir(filepath, function(err, files){
+  fs.readdir(filepath, function(err, files) {
     if (err) {
       res.send(404, err);
     } else {
@@ -385,7 +385,7 @@ Agent.prototype.listTaskResult = function(req, res) {
       res.send(buf.join('\n'));
     }
   });
-}
+};
 
 /**
  * @param {string=} description debug title.

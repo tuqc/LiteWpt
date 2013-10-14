@@ -35,7 +35,7 @@ var fs = require('fs');
 var fs_extra = require('fs-extra');
 var har = require('har');
 var http = require('http');
-var isrunning = require('is-running')
+var isrunning = require('is-running');
 var logger = require('logger');
 var mkdirp = require('mkdirp');
 var moment = require('moment');
@@ -139,7 +139,7 @@ Job.generateID = function(job) {
   var randStr = crypto.randomBytes(2).toString('hex');
   var dateStr = moment().format('YYYYMMDDHHmm');
   return dateStr + '_' + randStr;
-}
+};
 
 Job.prototype.processHAR = function(harJson) {
   'use strict';
@@ -149,7 +149,7 @@ Job.prototype.processHAR = function(harJson) {
   } else {
     this.task['success'] = false;
   }
-}
+};
 
 /**
  * Start tcp dump raw binary meesgae
@@ -157,17 +157,17 @@ Job.prototype.processHAR = function(harJson) {
 Job.prototype.startTCPDump = function() {
   var jobResult = this.client_.getJobResult(this.id);
   this.tcpdumpRawFile = jobResult.getResultFile('tcpdump.raw');
-  jobResult.mkdirp((function(err){
+  jobResult.mkdirp((function(err) {
     this.tcpdumpProcess = child_process.spawn(
         'tcpdump', ['-w', this.tcpdumpRawFile]);
     this.tcpdumpPid = this.tcpdumpProcess.pid;
     // Stop the tcpdump when timeout.
-    global.setTimeout((function(){
+    global.setTimeout((function() {
       this.stopTCPDump();
     }).bind(this), MAX_TCP_DUMP_TIME);
 
   }).bind(this));
-}
+};
 
 /**
  * Stop tcpdump process.
@@ -175,13 +175,13 @@ Job.prototype.startTCPDump = function() {
 Job.prototype.stopTCPDump = function() {
   if (this.tcpdumpProcess) {
     this.tcpdumpProcess.kill('SIGTERM');
-    global.setTimeout((function(){
+    global.setTimeout((function() {
       if (!this.tcpdumpPid) {
         return;
       }
       var pid = this.tcpdumpPid;
       // Double check, kill it if process is live.
-      isrunning(pid, function(err, live){
+      isrunning(pid, function(err, live) {
         if (live) {
          // child_process.spawn('kill', ['-9', '' + pid])
         }
@@ -189,7 +189,7 @@ Job.prototype.stopTCPDump = function() {
     }).bind(this), 30 * 1000);
     this.tcpdumpProcess = undefined;
   }
-}
+};
 
 /**
  * Called to finish the current run of this job, submit results, start next run.
@@ -211,7 +211,7 @@ Job.prototype.runFinished = function(isRunFinished) {
                       'task.json', JSON.stringify(this.task)));
     var jobResult = new JobResult(this.id, this.client_.resultDir);
 
-    jobResult.writeResult(this.resultFiles, (function(){
+    jobResult.writeResult(this.resultFiles, (function() {
       this.resultFiles = [];
       this.client_.finishRun_(this, isRunFinished);
     }).bind(this));
@@ -234,34 +234,34 @@ JobResult.prototype.getResultDir = function() {
   var date = moment(dateStr, 'YYYYMMDDHHmm');
   var align = function(num) {
     return num >= 10 ? '' + num : '0' + num;
-  }
+  };
   var path = util.format('%s/%s/%s/%s/%s/%s', this.baseDir,
                          align(date.year()), align(date.month() + 1),
                          align(date.date()), align(date.hour()),
                          this.jobID);
   return path;
-}
+};
 
 /**
  * Make job result directory.
  */
 JobResult.prototype.mkdirp = function(callback) {
-  mkdirp(this.path, function(err){
+  mkdirp(this.path, function(err) {
     if (!err) {
       callback();
     }
   });
-}
+};
 
 JobResult.prototype.getResultFile = function(filename) {
   return this.path + '/' + filename;
-}
+};
 
 JobResult.prototype.writeResult = function(resultFiles, callback) {
   'use strict';
   logger.info('Write results %s to %s', this.jobID, this.path);
 
-  var writeFile = (function(resultFile, fn){
+  var writeFile = (function(resultFile, fn) {
     // Write File
     var filePath = this.getResultFile(resultFile.fileName);
     fs.writeFile(filePath, resultFile.content, function(err) {
@@ -271,25 +271,25 @@ JobResult.prototype.writeResult = function(resultFiles, callback) {
   }).bind(this);
 
 
-  mkdirp(this.path, (function(err){
+  mkdirp(this.path, (function(err) {
     if (err) {
       logger.error(err);
     }
     // Write result files
-    async.each(resultFiles, writeFile, function(err){
+    async.each(resultFiles, writeFile, function(err) {
       if (err) {
         logger.error('Write file error. %s', err);
       }
-      if(callback){
+      if (callback) {
         callback();
       }
     });
   }).bind(this));
-}
+};
 
 JobResult.prototype.getHAR = function(resultFiles) {
   'use strict';
-}
+};
 
 /**
  * ResultFile sets information about the file produced as a
@@ -321,7 +321,7 @@ ResultFile.ContentType = Object.freeze({
   IMAGE_JPEG: 'image/jpeg',
   TEXT: 'text/plain',
   JSON: 'application/json',
-  ZIP: 'application/zip',
+  ZIP: 'application/zip'
 });
 
 
@@ -453,14 +453,14 @@ Client.prototype.onUncaughtException_ = function(e) {
 
 Client.prototype.getJobResult = function(jobID) {
   return new JobResult(jobID, this.resultDir);
-}
+};
 
 Client.prototype.addTask = function(task) {
   var job = new Job(this, task);
   logger.info('Add task: %j', task);
   this.jobQueue.push(job);
   return job.id;
-}
+};
 
 Client.prototype.runNextJob = function() {
   var job = this.jobQueue.shift();
@@ -471,7 +471,7 @@ Client.prototype.runNextJob = function() {
   } else {
     this.emit('nojob');
   }
-}
+};
 
 /**
  * Delete the old job, make sure the disk not too large.
@@ -489,14 +489,14 @@ Client.prototype.removeOutdateJobs = function() {
   */
   var deleteDir = function(destDir) {
     logger.info('Delete dir %s', destDir);
-    fs_extra.remove(destDir, function(err){
+    fs_extra.remove(destDir, function(err) {
       if (err) {
         logger.error('Delete dir %s error: %s', destDir, err);
       } else {
         logger.info('Delete dir %s success.', destDir);
       }
     });
-  }
+  };
 
   /**
    * Scan directory to decide to delete which derectories.
@@ -554,7 +554,7 @@ Client.prototype.removeOutdateJobs = function() {
 
   // Do it.
   processDir([]);
-}
+};
 
 /**
  * processJobResponse_ processes a server response and starts a new job
