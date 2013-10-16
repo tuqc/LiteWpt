@@ -134,20 +134,31 @@ function Job(client, task) {
 /** Public class. */
 exports.Job = Job;
 
-
+/**
+ * Generate unique job id in specific format.
+ * The can find the job result directory according the id.
+ *
+ * @param {Object} job input job.
+ * @return {String} unique job id.
+ */
 Job.generateID = function(job) {
   var randStr = crypto.randomBytes(2).toString('hex');
   var dateStr = moment().format('YYYYMMDDHHmm');
   return dateStr + '_' + randStr;
 };
 
+/**
+ * Process HAR object after parsed.
+ *
+ * @param {Object} harJson parsed HAR.
+ */
 Job.prototype.processHAR = function(harJson) {
   'use strict';
   if (harJson && harJson.log.pages.length > 0 &&
       harJson.log.entries.length > 0) {
-    this.task['success'] = true;
+    this.task.success = true;
   } else {
-    this.task['success'] = false;
+    this.task.success = false;
   }
 };
 
@@ -200,7 +211,7 @@ Job.prototype.runFinished = function(isRunFinished) {
   'use strict';
   if (this.tcpdump) this.stopTCPDump();
   if (isRunFinished && this === this.client_.currentJob_) {
-    this.task['endTimestamp'] = moment().unix();
+    this.task.endTimestamp = moment().unix();
     this.client_.finishedTasks.push(common_utils.cloneObject(this.task));
     if (this.client_.finishedTasks.length > 1000) {
       this.client_.finishedTasks.shift();
@@ -226,8 +237,14 @@ function JobResult(jobID, baseDir) {
   this.baseDir = baseDir;
   this.path = this.getResultDir();
 }
+/** Job result file object. */
 exports.JobResult = JobResult;
 
+/**
+ *  Get the result files top directory path.
+ *
+ *  @return {String} reuslt directory.
+ */
 JobResult.prototype.getResultDir = function() {
   'use strict';
   var dateStr = this.jobID.split('_')[0];
@@ -244,6 +261,7 @@ JobResult.prototype.getResultDir = function() {
 
 /**
  * Make job result directory.
+ * @param {Function} callback sucess callback.
  */
 JobResult.prototype.mkdirp = function(callback) {
   mkdirp(this.path, function(err) {
@@ -253,10 +271,22 @@ JobResult.prototype.mkdirp = function(callback) {
   });
 };
 
+/**
+ * Get the result file full path.
+ *
+ * @param {String} filename
+ * @return {String}
+ */
 JobResult.prototype.getResultFile = function(filename) {
   return this.path + '/' + filename;
 };
 
+/**
+ * Write test job reuslt.
+ *
+ * @param {Array} resultFiles result file objects to write.
+ * @param {Function} callback success callback function.
+ */
 JobResult.prototype.writeResult = function(resultFiles, callback) {
   'use strict';
   logger.info('Write results %s to %s', this.jobID, this.path);
@@ -287,22 +317,18 @@ JobResult.prototype.writeResult = function(resultFiles, callback) {
   }).bind(this));
 };
 
-JobResult.prototype.getHAR = function(resultFiles) {
-  'use strict';
-};
-
 /**
  * ResultFile sets information about the file produced as a
  * result of running a job.
  *
  * @this {ResultFile}
  *
- * @param {string=} resultType a ResultType constant defining the file role.
- * @param {string} fileName file will be sent to the server with this filename.
  * @param {string} contentType MIME content type.
+ * @param {string} fileName file will be sent to the server with this filename.
+
  * @param {string|Buffer} content the content to send.
  */
-function ResultFile(contentType, fileName, content, runNumber) {
+function ResultFile(contentType, fileName, content) {
   'use strict';
   this.fileName = fileName;
   this.contentType = contentType;
@@ -403,9 +429,9 @@ function Client(args) {
   this.onJobTimeout = undefined;
   this.handlingUncaughtException_ = undefined;
   this.resultDir = args.resultDir || RESULT_DIR;
-  this.jobQueue = new Array();
+  this.jobQueue = [];
 
-  this.finishedTasks = new Array();
+  this.finishedTasks = [];
   logger.info('Write result data to %s', this.resultDir);
 
   exports.process.on('uncaughtException', this.onUncaughtException_.bind(this));
@@ -451,10 +477,21 @@ Client.prototype.onUncaughtException_ = function(e) {
   }
 };
 
+/**
+ *  Get the test result from job id.
+ *
+ *  @param {String} jobID
+ *  @return {Object} job result.
+ */
 Client.prototype.getJobResult = function(jobID) {
   return new JobResult(jobID, this.resultDir);
 };
 
+/**
+ * Add task to task queue.
+ * @param {Object} task
+ * @return {String} the task id assigned.
+ */
 Client.prototype.addTask = function(task) {
   var job = new Job(this, task);
   logger.info('Add task: %j', task);
@@ -462,11 +499,12 @@ Client.prototype.addTask = function(task) {
   return job.id;
 };
 
+/** Run the next job in job queue, or else pause. */
 Client.prototype.runNextJob = function() {
   var job = this.jobQueue.shift();
   if (job) {
     logger.info('Run job: %s', job.id);
-    job.task['startTimestamp'] = moment().unix();
+    job.task.startTimestamp = moment().unix();
     this.startNextRun_(job);
   } else {
     this.emit('nojob');
@@ -486,6 +524,8 @@ Client.prototype.removeOutdateJobs = function() {
 
   /**
    * Delete directory recursively, similar to rm -rf.
+   *
+   * @param {String} destDir target directory path.
   */
   var deleteDir = function(destDir) {
     logger.info('Delete dir %s', destDir);
@@ -507,9 +547,9 @@ Client.prototype.removeOutdateJobs = function() {
     var dir = rootDir;
     for (var i in dirNames) {
       var name = dirNames[i];
-      var intVal = parseInt(name);
+      var intVal = parseInt(name, 10);
       // Check year dir name
-      if (i == 0 && !(intVal && intVal > 2012))
+      if (i === 0 && !(intVal && intVal > 2012))
         return;
       // Check month dir name
       if (i == 1 && !(intVal && intVal >= 1 && intVal <= 12))
@@ -822,7 +862,7 @@ Client.prototype.submitResult_ = function(job, isRunFinished, callback) {
 };
 
 /**
- * Requests a job from the server and notifies listeners about the outcome.
+ * Requests a job from the job queue and remove the old jobs.
  *
  * Event 'job' has the Job object as an argument. Calling done() on the job
  * object causes the client to submit the job result and emit 'done'.
@@ -831,9 +871,6 @@ Client.prototype.submitResult_ = function(job, isRunFinished, callback) {
  * 'timeout' with the job as an argument - to let other infrastructure clean up,
  * and then submits the job result and emits 'done'.
  *
- * @param {boolean} forever if false, make only one request. If true, chain
- *                  the request off of 'done' and 'nojob' events, running
- *                  forever or until the server responds with 'shutdown'.
  */
 Client.prototype.run = function() {
   'use strict';

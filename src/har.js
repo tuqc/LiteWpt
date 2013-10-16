@@ -4,14 +4,29 @@ var logger = require('logger');
 var util = require('util');
 var url = require('url');
 
+/** Parse HAR frome message arrag. */
 exports.parseFromMessages = parseFromMessages;
+
+/** Parse HAR from string. */
 exports.parseFromText = parseFromText;
 
+/**
+ * Parse string message to HAR object.
+ *
+ * @param {String} messageText
+ * @return {Object}  HAR object.
+ */
 function parseFromText(messageText) {
   var messages = JSON.parse(messageText);
   return parseFromMessages(messages);
 }
 
+/**
+ * Parse message array to HAR object.
+ *
+ * @param {Array} messages
+ * @return {Object} HAR object.
+ */
 function parseFromMessages(messages) {
   var har = {
     'log': {
@@ -25,24 +40,25 @@ function parseFromMessages(messages) {
     }
   };
 
-  var rootUrl = undefined;
-  for (var i in messages) {
-    var message = messages[i];
+  var rootUrl;
+  var i, message;
+  for (i in messages) {
+    message = messages[i];
     if (message.params && message.params.documentURL &&
-        message.params.documentURL.indexOf('http') == 0) {
+        message.params.documentURL.indexOf('http') === 0) {
       rootUrl = message.params.documentURL;
       break;
     }
   }
 
-  if (rootUrl == undefined) {
+  if (rootUrl === undefined) {
     return;
   }
   var pageCount = 0;
   var page = new Page('page_1_' + pageCount, rootUrl);
 
-  for (var i in messages) {
-    var message = messages[i];
+  for (i in messages) {
+    message = messages[i];
     page.processMessage(message);
   }
 
@@ -66,37 +82,60 @@ var Page = function(id, url, frameId) {
   this.originalRequestStatus = undefined; // true ok; false fail
 };
 
+/**
+ * Start the parse process.
+ */
 Page.prototype.start = function() {
   this.startTimestamp = new Date();
 };
 
+/**
+ * Dom total load time.
+ *
+ * return {Number} millisecond.
+ */
 Page.prototype.domLoaded = function() {
   this.domLoadedTime = new Date() - this.startTimestamp;
 };
 
+/**
+ * Page end time.
+ *
+ */
 Page.prototype.end = function() {
   this.endTime = new Date() - this.startTimestamp;
 };
 
+/**
+ * A page is done if both Page.domContentEventFired and
+ * Page.loadEventFired events are fired and the original
+ * request got a response
+ *
+ * @return {boolean}
+ */
 Page.prototype.isDone = function() {
-  // a page is done if both Page.domContentEventFired and Page.loadEventFired
-  // events are fired and the original request got a response
   return this.domLoadedTime && this.endTime &&
       this.originalRequestId &&
       typeof this.originalRequestStatus != 'undefined';
 };
 
+/**
+ * Check if page status is ok.
+ *
+ * @return {boolean}
+ */
 Page.prototype.isOk = function() {
-  return this.originalRequestStatus;
+  return !!this.originalRequestStatus;
 };
 
-// typical sequence:
-//
-// Network.requestWillBeSent # about to send a request
-// Network.responseReceived  # headers received
-// Network.dataReceived      # data chunk received
-// [...]
-// Network.loadingFinished   # full response received
+/**
+ * Process one message, typical sequence of messages:
+ * Network.requestWillBeSent # about to send a request
+ * Network.responseReceived  # headers received
+ * Network.dataReceived      # data chunk received
+ * Network.loadingFinished   # full response received
+ * @param {Object} message
+ */
 Page.prototype.processMessage = function(message) {
   if (!(message && message.params)) {
     return;
@@ -110,10 +149,12 @@ Page.prototype.processMessage = function(message) {
           }
 
        // Process redirect response
-      var redirectEntry = undefined;
+      var redirectEntry;
       if (message.params.redirectResponse) {
         redirectEntry = this.entries[id];
-        redirectEntry.responseEvent = {'response': message.params.redirectResponse};
+        redirectEntry.responseEvent = {
+          'response': message.params.redirectResponse
+        };
         redirectEntry.responseFinished = message.params.timestamp;
       }
       this.entries[id] = {
@@ -124,11 +165,11 @@ Page.prototype.processMessage = function(message) {
         'responseFinished': undefined
       };
       if (redirectEntry) {
-        this.entries[id]['redirectFrom'] = redirectEntry;
+        this.entries[id].redirectFrom = redirectEntry;
       }
 
-
-      if (this.startTimestamp < 0 || message.params.timestamp < this.startTimestamp) {
+      if (this.startTimestamp < 0 ||
+          message.params.timestamp < this.startTimestamp) {
         this.startTimestamp = message.params.timestamp;
       }
 
@@ -136,10 +177,12 @@ Page.prototype.processMessage = function(message) {
     case 'Network.dataReceived':
       if (id in this.entries) {
         this.entries[id].responseLength += message.params.dataLength;
-        this.entries[id].encodedResponseLength += message.params.encodedDataLength;
+        this.entries[id].encodedResponseLength +=
+          message.params.encodedDataLength;
       }
       //Page first byte timestamp
-      if (this.firstByteTimestamp < 0 || message.params.timestamp < this.firstByteTimestamp) {
+      if (this.firstByteTimestamp < 0 ||
+          message.params.timestamp < this.firstByteTimestamp) {
         this.firstByteTimestamp = message.params.timestamp;
       }
       break;
@@ -148,7 +191,8 @@ Page.prototype.processMessage = function(message) {
         this.entries[id].responseEvent = message.params;
       }
       //Page first byte timestamp
-      if (this.firstByteTimestamp < 0 || message.params.timestamp < this.firstByteTimestamp) {
+      if (this.firstByteTimestamp < 0 ||
+          message.params.timestamp < this.firstByteTimestamp) {
         this.firstByteTimestamp = message.params.timestamp;
       }
       break;
@@ -188,9 +232,16 @@ Page.prototype.processMessage = function(message) {
   }
 };
 
+/**
+ * Get the HAR object,
+ *
+ * @return {Object} HAR object
+ */
 Page.prototype.getHAR = function() {
-  var ttfb = Math.round(1000 * (this.firstByteTimestamp - this.startTimestamp));
-  var loadTime = Math.round(1000 * (this.loadEndTimestamp - this.startTimestamp));
+  var pageTTFB = Math.round(1000 * (this.firstByteTimestamp -
+                                    this.startTimestamp));
+  var loadTime = Math.round(1000 * (this.loadEndTimestamp -
+                                    this.startTimestamp));
   var har = {
     'info': {
       'startedDateTime': (new Date(this.startTimestamp * 1000)).toISOString(),
@@ -203,14 +254,16 @@ Page.prototype.getHAR = function() {
       '_loadTime': loadTime,
       '_docTime': loadTime,
       '_fullyLoaded': loadTime,
-      '_TTFB': ttfb
+      '_TTFB': pageTTFB
     },
     'entries': []
   };
 
+  var entry;
+  var requestId;
   var flatedEntries = [];
-  for (var requestId in this.entries) {
-    var entry = this.entries[requestId];
+  for (requestId in this.entries) {
+    entry = this.entries[requestId];
     flatedEntries.push(entry);
     while (entry.redirectFrom) {
       flatedEntries.push(entry.redirectFrom);
@@ -218,8 +271,8 @@ Page.prototype.getHAR = function() {
     }
   }
 
-  for (var requestId in flatedEntries) {
-    var entry = flatedEntries[requestId];
+  for (requestId in flatedEntries) {
+    entry = flatedEntries[requestId];
 
     // skip incomplete entries
     if (!entry.responseEvent) {
@@ -268,9 +321,10 @@ Page.prototype.getHAR = function() {
         entry.requestEvent.request.url.length +
         12); // "HTTP/1.x" + "  " + "\r\n"
 
-    responseHeaders.size += (entry.responseEvent.response.status.toString().length +
-        entry.responseEvent.response.statusText.length +
-        12); // "HTTP/1.x" + "  " + "\r\n"
+     // "HTTP/1.x" + "  " + "\r\n"
+    responseHeaders.size += (entry.responseEvent.response.status
+                             .toString().length + entry.responseEvent
+                             .response.statusText.length + 12);
 
     // query string
     var queryString = parseQueryString(entry.requestEvent.request.url);

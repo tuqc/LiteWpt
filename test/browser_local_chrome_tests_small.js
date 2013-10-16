@@ -96,7 +96,8 @@ describe('browser_local_chrome small', function() {
     sandbox.clock.tick(webdriver.promise.Application.EVENT_LOOP_FREQUENCY * 4);
     should.equal('[]', app.getSchedule());
     should.ok(browser.isRunning());
-    should.equal('http://localhost:' + browser.serverPort_, browser.getServerUrl());
+    should.equal('http://localhost:' + browser.serverPort_,
+                 browser.getServerUrl());
     should.equal('http://localhost:' + browser.devToolsPort_ + '/json',
                  browser.getDevToolsUrl());
     should.ok(processSpawnStub.calledOnce);

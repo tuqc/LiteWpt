@@ -2,6 +2,12 @@
 var moment = require('moment');
 var util = require('util');
 
+/**
+ * Convert task to html.
+ *
+ * @param {Object} task input task.
+ * @return {String} output html string.
+ */
 exports.task2Html = function(task) {
   var buf = [];
   buf.push('<pre>');
@@ -52,10 +58,22 @@ exports.task2Html = function(task) {
   return buf.join('\n');
 };
 
+/**
+ * Clone object.
+ *
+ * @param {Object} oldObject input object.
+ * @return {Object} cloned object.
+ */
 exports.cloneObject = function(oldObject) {
   return JSON.parse(JSON.stringify(oldObject));
 };
 
+/**
+ * Parse unix timestamp to readable string.
+ *
+ * @param {number} ts input timesatmp.
+ * @return {String} output string.
+ */
 exports.timestamp2Str = function(ts) {
   return moment(ts * 1000).format('YYYY-MM-DD HH:mm:ss');
 };

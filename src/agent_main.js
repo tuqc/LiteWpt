@@ -61,12 +61,14 @@ var knownOpts = {
   resultDir: [String, null]
 };
 
-var WD_SERVER_EXIT_TIMEOUT = 5000;  // Wait for 5 seconds before force-killing
-var WD_SCRIPT_TEMPLATE = " \
-    driver = new webdriver.Builder().build(); \
-    driver.get('%s'); \
-    driver.sleep(3000); \
-    driver.wait(function()  { return driver.getTitle();});";
+// Wait for 5 seconds before force-killing
+var WD_SERVER_EXIT_TIMEOUT = 5000;
+
+/*jslint multistr: true */
+var WD_SCRIPT_TEMPLATE = 'driver = new webdriver.Builder().build();' +
+    "driver.get('%s');" +
+    'driver.sleep(3000);' +
+    'driver.wait(function()  { return driver.getTitle();});';
 
 /**
  * @param {wpt_client.Client} client the WebPagetest client.
@@ -109,8 +111,10 @@ Agent.prototype.run = function() {
   this.httpServer.post('/task/submit', this.submitTask.bind(this));
   this.httpServer.get('/task/status/:id', this.showTaskStatus.bind(this));
   this.httpServer.get('/task/result/:id', this.listTaskResult.bind(this));
-  this.httpServer.get('/task/result/:id/:filename', this.showTaskResult.bind(this));
-  this.httpServer.get('/task/result/:id/:filename/stat', this.statTaskResult.bind(this));
+  this.httpServer.get('/task/result/:id/:filename',
+                      this.showTaskResult.bind(this));
+  this.httpServer.get('/task/result/:id/:filename/stat',
+                      this.statTaskResult.bind(this));
   this.httpServer.get('/healthz', this.healthz.bind(this));
   this.httpServer.get('/varz', this.varz.bind(this));
 
@@ -131,16 +135,34 @@ Agent.prototype.run = function() {
   this.client_.run();
 };
 
+/**
+ * Show the health.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.healthz = function(req, res) {
   res.set('Content-Type', 'text/plain');
   res.send('ok');
 };
 
+/**
+ * Show the varz.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.varz = function(req, res) {
   res.set('Content-Type', 'text/plain');
   res.send('ok');
 };
 
+/**
+ * Resolve hosts to IPs.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.resolveIP = function(req, res) {
   var host = req.query.host;
   if (!host) {
@@ -170,6 +192,12 @@ Agent.prototype.resolveIP = function(req, res) {
   });
 };
 
+/**
+ * Show the counters.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.showCounter = function(req, res) {
   var counter = req.params.counter;
   res.set('Content-Type', 'text/plain');
@@ -180,6 +208,12 @@ Agent.prototype.showCounter = function(req, res) {
   }
 };
 
+/**
+ * Show the server summary.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.showSummary = function(req, res) {
 
   var buf = [];
@@ -187,7 +221,8 @@ Agent.prototype.showSummary = function(req, res) {
   buf.push('Server start from: <strong>' +
            this.startDate.format('YYYY-MM-DD HH:mm:ss') +
            '</strong>; <strong>' + this.startDate.fromNow() + '</strong><br>');
-  buf.push('Server current time: ' + moment().format('YYYY-MM-DD HH:mm:ss') + '<br>');
+  buf.push('Server current time: ' +
+           moment().format('YYYY-MM-DD HH:mm:ss') + '<br>');
 
   buf.push('<strong>Running Jobs:</strong> <a href="/static/submit.html"' +
            ' target=_blank>Submit Test</a><br>');
@@ -209,8 +244,8 @@ Agent.prototype.showSummary = function(req, res) {
   buf.push('<strong>Finished Jobs:</strong>(Recent ' +
            this.client_.finishedTasks.length + ')<br>');
 
-  for (var i = this.client_.finishedTasks.length - 1; i >= 0; --i) {
-    var task = this.client_.finishedTasks[i];
+  for (var k = this.client_.finishedTasks.length - 1; k >= 0; --k) {
+    var task = this.client_.finishedTasks[k];
     buf.push(common_utils.task2Html(task) + '<br>');
   }
 
@@ -221,8 +256,8 @@ Agent.prototype.showSummary = function(req, res) {
 };
 
 /**
- * Typicall task contain following fields
- * var task = {
+ * Submit task. Typicall task contain following fields var
+ * task = {
  *   "url":"",
  *   "runs": 1,
  *   "fvonly": 0,
@@ -231,6 +266,9 @@ Agent.prototype.showSummary = function(req, res) {
  *   "script":"driver = new
  *      webdriver.Builder().build();driver.get('http://www.baidu.com');
  *      driver.wait(function()  { return driver.getTitle();});", };
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
  */
 Agent.prototype.submitTask = function(req, res) {
   'use strict';
@@ -247,51 +285,62 @@ Agent.prototype.submitTask = function(req, res) {
     for (var i in this.client_.jobQueue) {
       var t = this.client_.jobQueue[i].task;
       if (t.gid && t.gid === task.gid) {
-        return res.json(500, {'message': 'Duplicate gid.'});
+        res.json(500, {'message': 'Duplicate gid.'});
+        return;
       }
     }
   }
 
-  task['submitTimestamp'] = moment().unix();
+  task.submitTimestamp = moment().unix();
   if (!task.script) {
     if (task.url) {
-      if (task.url.indexOf('http') != 0) {
+      if (task.url.indexOf('http') !== 0) {
         task.url = 'http://' + task.url;
       }
       task.script = util.format(WD_SCRIPT_TEMPLATE, task.url);
     } else {
-      return res.json(501, {'message': 'No url or script.'});
+      res.json(501, {'message': 'No url or script.'});
+      return;
     }
   }
 
-  task.runs = (task.runs ? parseInt(task.runs) : 1);
-  task.fvonly = (task.fvonly ? parseInt(task.fvonly) : 1);
-  task.isCacheWarm = (task.isCacheWarm ? parseInt(task.isCacheWarm) : 0);
-  task.tcpdump = (task.tcpdump ? parseInt(task.tcpdump) : 0);
+  task.runs = (task.runs ? parseInt(task.runs, 10) : 1);
+  task.fvonly = (task.fvonly ? parseInt(task.fvonly, 10) : 1);
+  task.isCacheWarm = (task.isCacheWarm ? parseInt(task.isCacheWarm, 10) : 0);
+  task.tcpdump = (task.tcpdump ? parseInt(task.tcpdump, 10) : 0);
 
   var id = this.client_.addTask(task);
   res.json({'id': id, 'position': this.client_.jobQueue.length});
 };
 
+/**
+ * Show the task status.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.showTaskStatus = function(req, res) {
   'use strict';
   res.set('Content-Type', 'application/json');
   var id = req.params.id;
   if (this.client_.currentJob_ && this.client_.currentJob_.id === id) {
-    return res.json({'status': 'running'});
+    res.json({'status': 'running'});
+    return;
   }
   for (var i in this.client_.jobQueue) {
     var job = this.client_.jobQueue[i];
     if (job.id === id) {
-      return res.json({'status': 'pending', 'position': i + 1});
+      res.json({'status': 'pending', 'position': i + 1});
+      return;
     }
   }
 
-  for (var i in this.client_.finishedTasks) {
-    var task = this.client_.finishedTasks[i];
+  for (var k in this.client_.finishedTasks) {
+    var task = this.client_.finishedTasks[k];
     if (task.id === id) {
-      return res.json({'status': 'finished',
-                       'success': task.success || false});
+      res.json({'status': 'finished',
+                'success': task.success || false});
+      return;
     }
   }
 
@@ -304,15 +353,23 @@ Agent.prototype.showTaskStatus = function(req, res) {
     } else {
       var task = JSON.parse(data);
       if (task) {
-        return res.json({'status': 'finished',
-                         'success': task.success || false});
+        res.json({'status': 'finished',
+                  'success': task.success || false});
+        return;
       } else {
         res.json(500, 'Task record error: ' + data);
+        return;
       }
     }
   });
 };
 
+/**
+ * Show the test job queue.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.showTaskQueue = function(req, res) {
   'use strict';
   var buf = [];
@@ -325,6 +382,12 @@ Agent.prototype.showTaskQueue = function(req, res) {
            '\n\n' + buf.join('\n\n'));
 };
 
+/**
+ * Show the task result file.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.showTaskResult = function(req, res) {
   'use strict';
   var id = req.params.id;
@@ -346,6 +409,13 @@ Agent.prototype.showTaskResult = function(req, res) {
   });
 };
 
+/**
+ * Show the task file stat.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
+
 Agent.prototype.statTaskResult = function(req, res) {
   'use strict';
   var id = req.params.id;
@@ -364,6 +434,12 @@ Agent.prototype.statTaskResult = function(req, res) {
   });
 };
 
+/**
+ * List the task result files.
+ *
+ * @param {Object} req the request object.
+ * @param {Object} res the response object.
+ */
 Agent.prototype.listTaskResult = function(req, res) {
   'use strict';
   var id = req.params.id;
