@@ -100,7 +100,7 @@ cd "${ROOT_DIR}"
 
 if [[ ! -z "$lint" ]]; then
   if which jshint >/dev/null; then
-    jshint src/*.js test/*.js
+    jshint src/*.js src/phantomjs/*.js test/*.js
   else
     echo 'Missing jshint.  To install, run:'
     if ! which npm >/dev/null; then

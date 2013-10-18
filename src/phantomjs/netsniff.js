@@ -9,7 +9,7 @@
 if (!Date.prototype.toISOString) {
   Date.prototype.toISOString = function () {
     function pad(n) { return n < 10 ? '0' + n : n; }
-    function ms(n) { return n < 10 ? '00'+ n : n < 100 ? '0' + n : n }
+    function ms(n) { return n < 10 ? '00'+ n : n < 100 ? '0' + n : n; }
     return this.getFullYear() + '-' +
         pad(this.getMonth() + 1) + '-' +
         pad(this.getDate()) + 'T' +
@@ -17,7 +17,7 @@ if (!Date.prototype.toISOString) {
         pad(this.getMinutes()) + ':' +
         pad(this.getSeconds()) + '.' +
         ms(this.getMilliseconds()) + 'Z';
-  }
+  };
 }
 
 function createHAR(address, title, startTime, resources)
