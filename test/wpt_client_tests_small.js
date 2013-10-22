@@ -120,43 +120,4 @@ describe('wpt_client small', function() {
 //        'http://server/work/getwork.php?location=Test&f=json');
   });
 
-  it('should submit right number of result files', function() {
-    var submitResultFiles = function(numFiles, callback) {
-      var filesSubmitted = 0;
-      var client = new wpt_client.Client({serverUrl: 'server',
-          location: 'location'});
-
-      sandbox.stub(client, 'postResultFile_',
-          function(job, resultFile, fields, callback) {
-        logger.debug('stub postResultFile_ f=%j fields=%j', resultFile, fields);
-        filesSubmitted += 1;
-        callback();
-      });
-
-      var resultFiles = [];
-      var iFile;
-      for (iFile = 1; iFile <= numFiles; iFile += 1) {
-        resultFiles.push(
-            {fileName: 'file ' + iFile, content: 'content ' + iFile});
-      }
-
-      client.submitResult_(
-          {id: 'test', resultFiles: resultFiles, zipResultFiles: {}},
-          /*isRunFinished=*/true, function() {
-        should.equal(filesSubmitted, numFiles + 1);
-        callback();
-      });
-    };
-
-    var isDone = false;
-    submitResultFiles(0, function() {
-      submitResultFiles(1, function() {
-        submitResultFiles(2, function() {
-          isDone = true;
-        });
-      });
-    });
-    should.ok(isDone);
-  });
-
 });

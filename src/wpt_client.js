@@ -43,15 +43,11 @@ var multipart = require('multipart');
 var path = require('path');
 var url = require('url');
 var util = require('util');
-var Zip = require('node-zip');
 
 /** Allow tests to stub out . */
 exports.process = process;
 
-var GET_WORK_SERVLET = 'work/getwork.php';
-var RESULT_IMAGE_SERVLET = 'work/resultimage.php';
-var WORK_DONE_SERVLET = 'work/workdone.php';
-
+// Result data directory.
 var RESULT_DIR = './result';
 
 // Task JSON field names
@@ -194,7 +190,7 @@ Job.prototype.stopTCPDump = function() {
       // Double check, kill it if process is live.
       isrunning(pid, function(err, live) {
         if (live) {
-         // child_process.spawn('kill', ['-9', '' + pid])
+          child_process.spawn('kill', ['-9', '' + pid])
         }
       });
     }).bind(this), 30 * 1000);
@@ -434,7 +430,8 @@ function Client(args) {
   this.finishedTasks = [];
   logger.info('Write result data to %s', this.resultDir);
 
-  exports.process.on('uncaughtException', this.onUncaughtException_.bind(this));
+  exports.process.on('uncaughtException',
+                     this.onUncaughtException_.bind(this));
 
   logger.extra('Created Client (urlPath=%s): %j', urlPath, this);
 }
@@ -697,168 +694,6 @@ Client.prototype.finishRun_ = function(job, isRunFinished) {
     logger.error('Timed-out job finished, but too late: %s', job.id);
     this.handlingUncaughtException_ = undefined;
   }
-};
-
-function createZip(zipFileMap, fileNamePrefix) {
-  'use strict';
-  var zip = new Zip();
-  Object.getOwnPropertyNames(zipFileMap).forEach(function(fileName) {
-    var content = zipFileMap[fileName];
-
-
-    var body = content;
-    var bodyBuffer = (body instanceof Buffer ? body : new Buffer(body));
-     fs.mkdir('results/', parseInt('0755', 8), function(e) {
-        if (!e || 'EEXIST' === e.code) {
-          var subdir = 'results/tmp/';
-          fs.mkdir(subdir, parseInt('0755', 8), function(e) {
-            if (!e || 'EEXIST' === e.code) {
-              fs.writeFile(subdir + fileName, bodyBuffer);
-            }
-          });
-        }
-      });
-
-    logger.debug('Adding %s%s (%d bytes) to results zip',
-        fileNamePrefix, fileName, content.length);
-    zip.file(fileNamePrefix + fileName, content);
-  });
-  // Convert back and forth between base64, otherwise corrupts on long content.
-  // Unfortunately node-zip does not support passing/returning Buffer.
-  return new Buffer(
-      zip.generate({compression: 'DEFLATE', base64: true}), 'base64');
-}
-
-/**
- * Submits one part of the job result, with an optional file.
- *
- * @private
- *
- * @param {Object} job the result file will be saved for.
- * @param {Object} resultFile of type ResultFile. May be null/undefined.
- * @param {Array=} fields an array of [name, value] text fields to add.
- * @param {Function=} callback will get called with the HTTP response body.
- */
-Client.prototype.postResultFile_ = function(job, resultFile, fields, callback) {
-  'use strict';
-  logger.extra('postResultFile: job=%s resultFile=%s fields=%j callback=%s',
-      job.id, (resultFile ? 'present' : null), fields, callback);
-  var servlet = WORK_DONE_SERVLET;
-  var mp = new multipart.Multipart();
-  mp.addPart('id', job.id, ['Content-Type: text/plain']);
-  mp.addPart('location', this.location_);
-  if (this.apiKey) {
-    mp.addPart('key', this.apiKey);
-  }
-  if (fields) {
-    fields.forEach(function(nameValue) {
-      mp.addPart(nameValue[0], nameValue[1]);
-    });
-  }
-  if (resultFile) {
-    // A part with name="resultType" and then the content with name="file"
-    if (exports.ResultFile.ContentType.IMAGE_PNG === resultFile.contentType) {
-      // Images go to a different servlet and don't need the resultType part
-      servlet = RESULT_IMAGE_SERVLET;
-    } else {
-      if (resultFile.contentType) {
-        mp.addPart(resultFile.contentType, '1');
-      }
-      mp.addPart('_runNumber', String(job.runNumber));
-      mp.addPart('_cacheWarmed', job.isCacheWarm ? '1' : '0');
-    }
-    var fileName = job.runNumber + (job.isCacheWarm ? '_Cached_' : '_') +
-        resultFile.fileName;
-    mp.addFilePart(
-        'file', fileName, resultFile.contentType, resultFile.content);
-    if (logger.isLogging('debug')) {
-      logger.debug('Writing a local copy of %s', fileName);
-      var body = resultFile.content;
-      var bodyBuffer = (body instanceof Buffer ? body : new Buffer(body));
-      fs.mkdir('results/', parseInt('0755', 8), function(e) {
-        if (!e || 'EEXIST' === e.code) {
-          var subdir = 'results/' + job.id + '/';
-          fs.mkdir(subdir, parseInt('0755', 8), function(e) {
-            if (!e || 'EEXIST' === e.code) {
-              fs.writeFile(subdir + fileName, bodyBuffer);
-            }
-          });
-        }
-      });
-    }
-  }
-  // TODO(klm): change body to chunked request.write().
-  // Only makes sense if done for file content, the rest is peanuts.
-  var mpResponse = mp.getHeadersAndBody();
-
-  var options = {
-      method: 'POST',
-      host: this.baseUrl_.hostname,
-      port: this.baseUrl_.port,
-      path: '/hello',
-      //path: path.join(this.baseUrl_.path, servlet),
-      headers: mpResponse.headers
-    };
-  var request = http.request(options, function(res) {
-    exports.processResponse(res, callback);
-  });
-  request.on('error', function(e) {
-    logger.warn('Unable to post result: ' + e.message);
-  });
-  request.end(mpResponse.bodyBuffer, 'UTF-8');
-};
-
-/**
- * submitResult_ posts all result files for the job and emits done.
- *
- * @param {Object} job that should be completed.
- * @param {boolean} isRunFinished true if finished.
- * @param {Function} callback Function({Error?} err).
- * @private
- */
-Client.prototype.submitResult_ = function(job, isRunFinished, callback) {
-  'use strict';
-  logger.debug('submitResult_: job=%s', job.id);
-  var filesToSubmit = job.resultFiles.slice();
-  // If there are job.zipResultFiles, add results.zip to job.resultFiles.
-  if (Object.getOwnPropertyNames(job.zipResultFiles).length > 0) {
-    var zipResultFiles = job.zipResultFiles;
-    job.zipResultFiles = {};
-    var fileNamePrefix = job.runNumber + (job.isCacheWarm ? '_Cached_' : '_');
-    filesToSubmit.push(new ResultFile(
-        /*resultType=*/undefined,
-        'results.zip',
-        'application/zip',
-        createZip(zipResultFiles, fileNamePrefix)));
-  }
-  job.resultFiles = [];
-  // Chain submitNextResult calls off of the HTTP request callback
-  var submitNextResult = (function() {
-    var resultFile = filesToSubmit.shift();
-    var fields = [];
-    if (resultFile) {
-      if (job.error) {
-        fields.push(['error', job.error]);
-      }
-      this.postResultFile_(job, resultFile, fields, submitNextResult);
-    } else {
-      if (job.runNumber === job.runs && isRunFinished) {
-        fields.push(['done', '1']);
-        if (job.error) {
-          fields.push(['testerror', job.error]);
-        }
-        this.postResultFile_(job, undefined, fields, function() {
-          if (callback) {
-            callback();
-          }
-          this.emit('done', job);
-        }.bind(this));
-      } else if (callback) {
-        callback();
-      }
-    }
-  }.bind(this));
-  submitNextResult();
 };
 
 /**

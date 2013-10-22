@@ -65,7 +65,14 @@ exports.task2Html = function(task) {
  * @return {Object} cloned object.
  */
 exports.cloneObject = function(oldObject) {
-  return JSON.parse(JSON.stringify(oldObject));
+  var copy = Object.create( Object.getPrototypeOf(oldObject) );
+  var propNames = Object.getOwnPropertyNames(oldObject);
+
+  propNames.forEach(function(name){
+    var desc = Object.getOwnPropertyDescriptor(oldObject, name);
+    Object.defineProperty(copy, name, desc);
+  });
+  return copy;
 };
 
 /**
