@@ -91,7 +91,7 @@ TaskManager.prototype.finishTask(task) {
   this.runningQueue.remove(task.taskDef);
   logger.debug('%s Finish task %s', this.name, task.id);
 
-  if (this.runningQueue.length < MAX_PHANTOMJS_PROCESS) {
+  if (this.runningQueue.length < this.maxConcurrent) {
     this.emit('runnext');
   }
 
@@ -115,7 +115,6 @@ TaskManager.prototype.finishTask(task) {
   } else {
     this.client_.finishRun_(this, isRunFinished);
   }
-
 };
 
 /**
@@ -168,6 +167,7 @@ function Task(taskDef) {
   this.id = taskDef.id;
   this.taskResult = {};
   this.error = undefined;
+  thi.resultFiles = [];
 }
 /** Public class. */
 exports.Task = Task;
@@ -208,7 +208,7 @@ Task.prototype.setError = function(error) {
 };
 
 Task.prototype.addResultFile = function(filename, content) {
-
+  this.resultFiles.push({filename: filename, content: content});
 }
 
 /**

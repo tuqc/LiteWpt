@@ -13,7 +13,8 @@ var process_utils = require('process_utils');
 var system_commands = require('system_commands');
 var util = require('util');
 var webdriver = require('webdriver');
-var wpt_client = require('wpt_client');
+var task_manager = require('task_manager');
+var wd_client = require('wd_client');
 
 /**
  * Partial list of expected command-line options.
@@ -43,9 +44,9 @@ var WD_SCRIPT_TEMPLATE = 'driver = new webdriver.Builder().build();' +
  * @param {Object} flags from knownOpts.
  * @constructor
  */
-function WebServer(client, flags) {
+function WebServer(taskMgrList, flags) {
   'use strict';
-  this.client_ = client;
+  this.taskMgrList_ = taskMgrList;
   this.flags_ = flags;
   this.httpServer = express();
   this.httpPort = flags.port ? flags.port : 8888;
@@ -154,6 +155,14 @@ WebServer.prototype.resolveIP = function(req, res) {
     res.json(resolvedResult);
   });
 };
+
+WebServer.prototype.getRunningQueue_ = function() {
+  var runningQueue = [];
+  for (var i = this.taskMgrList_.length - 1; i >= 0; i--) {
+    runningQueue.concat(this.taskMgrList_[i].runningQueue);
+  };
+  return runningQueue;
+}
 
 /**
  * Show the counters.
@@ -442,10 +451,8 @@ exports.setSystemCommands = function() {
 };
 
 /**
- * main is called automatically if agent_main is the node module called directly
- * which it should be. Main initializes the wpt_client Object with the flags
- * set by the run script and calls run with it
- *
+ * main is called automatically if server_main is the node module called
+ * directly which it should be.
  * @param  {Object} flags command line flags.
  */
 exports.main = function(flags) {
@@ -455,9 +462,15 @@ exports.main = function(flags) {
   }
   exports.setSystemCommands();
   delete flags.argv; // Remove nopt dup
-  var client = new wpt_client.Client(flags);
-  var agent = new Agent(client, flags);
-  agent.run();
+
+  var taskMgrList = [];
+  var wd_manager = task_manager.TaskManager('chrome',
+                                            wd_client.WebDriverClient, 1);
+  wd_manager.run();
+  taskMgrList.push(wd_manager);
+
+  var webServer = WebServer(taskMgrList, flags);
+  webServer.run();
 };
 
 if (require.main === module) {
