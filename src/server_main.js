@@ -156,12 +156,42 @@ WebServer.prototype.resolveIP = function(req, res) {
   });
 };
 
-WebServer.prototype.getRunningQueue_ = function() {
+WebServer.prototype.getRunningTasks_ = function() {
   var runningQueue = [];
   for (var i = this.taskMgrList_.length - 1; i >= 0; i--) {
     runningQueue.concat(this.taskMgrList_[i].runningQueue);
   };
   return runningQueue;
+}
+
+WebServer.prototype.getPendingTasks_ = function() {
+  var pending = [];
+  for (var i = this.taskMgrList_.length - 1; i >= 0; i--) {
+    pending.concat(this.taskMgrList_[i].pendingQueue);
+  };
+  return pending;
+}
+
+WebServer.prototype.getFinishedTasks_ = function() {
+  var finished = [];
+  for (var i = this.taskMgrList_.length - 1; i >= 0; i--) {
+    finished.concat(this.taskMgrList_[i].finishedQueue);
+  };
+  return finished;
+}
+
+WebServer.prototype.getTaskManager_ = function(taskDef) {
+  // Default client task manager.
+  var taskMgr = this.taskMgrList_[0];
+  // Use the right task manager if specified.
+  if (taskDef.client) {
+    for (var i = 0; i < this.taskMgrList_.length; i++) {
+      if (this.taskMgrList_[i].name == taskDef.client) {
+        taskMgr = this.taskMgrList_[i];
+      }
+    };
+  };
+  return taskMgr;
 }
 
 /**
@@ -196,29 +226,29 @@ WebServer.prototype.showSummary = function(req, res) {
   buf.push('Server current time: ' +
            moment().format('YYYY-MM-DD HH:mm:ss') + '<br>');
 
+  var runningTasks = this.getRunningTasks_();
+  var pendingTasks = this.getPendingTasks_();
+  var finishedTasks = this.getFinishedTasks_();
+
   buf.push('<strong>Running Jobs:</strong> <a href="/static/submit.html"' +
            ' target=_blank>Submit Test</a><br>');
-  if (this.client_.currentJob_) {
-    buf.push(common_utils.task2Html(this.client_.currentJob_.task) + '<br>');
-  }
+  var i = 0;
+  for (i = runningTasks.length - 1; i >= 0; i--) {
+    buf.push(common_utils.task2Html(runningTasks[i]) + '<br>');
+  };
 
-  if (this.client_.jobQueue.length > 0) {
-    buf.push('<strong>Waiting Jobs:</strong><br>');
-  } else {
-    buf.push('<strong>Waiting Jobs:</strong> None<br>');
-  }
+  buf.push('<strong>Waiting Jobs:</strong>' + pendingTasks.length +'<br>');
 
-  for (var i in this.client_.jobQueue) {
-      var job = this.client_.jobQueue[i];
-      buf.push(common_utils.task2Html(job.task) + '<br>');
-  }
+  for (i = pendingTasks.length - 1; i >= 0; i--) {
+    buf.push(common_utils.task2Html(pendingTasks[i]) + '<br>');
+  };
+
 
   buf.push('<strong>Finished Jobs:</strong>(Recent ' +
-           this.client_.finishedTasks.length + ')<br>');
+           finishedTasks.length + ')<br>');
 
-  for (var k = this.client_.finishedTasks.length - 1; k >= 0; --k) {
-    var task = this.client_.finishedTasks[k];
-    buf.push(common_utils.task2Html(task) + '<br>');
+  for (i = finishedTasks.length - 1; i >= 0; --i) {
+    buf.push(common_utils.task2Html(finishedTasks[i]) + '<br>');
   }
 
   buf.push('</body></html>');
@@ -245,44 +275,36 @@ WebServer.prototype.showSummary = function(req, res) {
 WebServer.prototype.submitTask = function(req, res) {
   'use strict';
   res.set('Content-Type', 'application/json');
-  var task = req.body;
-  if (!(task.url || task.script)) {
-    task = req.query;
+  var taskDef = req.body;
+  if (!(taskDef.url || taskDef.script)) {
+    taskDef = req.query;
   }
 
-  // Gid short for group id, Here we don't allow 2 or more tasks
-  // with the same gid in the pending list.
-  if (task.gid) {
-    var found = false;
-    for (var i in this.client_.jobQueue) {
-      var t = this.client_.jobQueue[i].task;
-      if (t.gid && t.gid === task.gid) {
-        res.json(500, {'message': 'Duplicate gid.'});
-        return;
+  taskDef.submitTimestamp = moment().unix();
+  if (!taskDef.script) {
+    if (taskDef.url) {
+      if (taskDef.url.indexOf('http') !== 0) {
+        taskDef.url = 'http://' + taskDef.url;
       }
-    }
-  }
-
-  task.submitTimestamp = moment().unix();
-  if (!task.script) {
-    if (task.url) {
-      if (task.url.indexOf('http') !== 0) {
-        task.url = 'http://' + task.url;
-      }
-      task.script = util.format(WD_SCRIPT_TEMPLATE, task.url);
+      taskDef.script = util.format(WD_SCRIPT_TEMPLATE, taskDef.url);
     } else {
       res.json(501, {'message': 'No url or script.'});
       return;
     }
   }
 
-  task.runs = (task.runs ? parseInt(task.runs, 10) : 1);
-  task.fvonly = (task.fvonly ? parseInt(task.fvonly, 10) : 1);
-  task.isCacheWarm = (task.isCacheWarm ? parseInt(task.isCacheWarm, 10) : 0);
-  task.tcpdump = (task.tcpdump ? parseInt(task.tcpdump, 10) : 0);
+  taskDef.isCacheWarm = (taskDef.isCacheWarm ?
+                         parseInt(taskDef.isCacheWarm, 10) : 0);
+  taskDef.tcpdump = (taskDef.tcpdump ? parseInt(taskDef.tcpdump, 10) : 0);
 
-  var id = this.client_.addTask(task);
-  res.json({'id': id, 'position': this.client_.jobQueue.length});
+  var taskMgr = this.getTaskManager_(taskDef);
+
+  var ret = taskMgr.addTask(taskDef);
+  if (ret.error) {
+    res.json(500, ret);
+  } else {
+    res.json(ret);
+  }
 };
 
 /**
@@ -295,45 +317,39 @@ WebServer.prototype.showTaskStatus = function(req, res) {
   'use strict';
   res.set('Content-Type', 'application/json');
   var id = req.params.id;
-  if (this.client_.currentJob_ && this.client_.currentJob_.id === id) {
-    res.json({'status': 'running'});
-    return;
-  }
-  for (var i in this.client_.jobQueue) {
-    var job = this.client_.jobQueue[i];
-    if (job.id === id) {
-      res.json({'status': 'pending', 'position': i + 1});
-      return;
-    }
-  }
 
-  for (var k in this.client_.finishedTasks) {
-    var task = this.client_.finishedTasks[k];
-    if (task.id === id) {
-      res.json({'status': 'finished',
-                'success': task.success || false});
-      return;
-    }
-  }
+  var task;
 
-  var jobResult = this.client_.getJobResult(id);
-  var filepath = jobResult.getResultFile('task.json');
+  for (var i = 0; i < this.taskMgrList_.length; i++) {
+    task = this.taskMgrList_[i].findTask(id);
+  };
 
-  fs.readFile(filepath, function(err, data) {
-    if (err) {
-      res.send(404, 'Not found ' + id);
+  if (!task) {
+    res.send(404, 'Not found ' + id);
+  } else {
+
+    //Finished task
+    if (task.status = task_manager.Task.Status.FINISHED) {
+      var filepath = task.getResultFilePath('task.json');
+      fs.readFile(filepath, function(err, data) {
+        if (err) {
+          res.send(404, 'Not found ' + id);
+        } else {
+          var taskDef = JSON.parse(data);
+          if (taskDef) {
+            res.json({'status': task_manager.Task.Status.FINISHED,
+                      'success': taskDef.success || false});
+            return;
+          } else {
+            res.json(500, 'Task record error: ' + data);
+            return;
+          }
+        }
+      });
     } else {
-      var task = JSON.parse(data);
-      if (task) {
-        res.json({'status': 'finished',
-                  'success': task.success || false});
-        return;
-      } else {
-        res.json(500, 'Task record error: ' + data);
-        return;
-      }
+      res.json({'status': task.status);
     }
-  });
+  }
 };
 
 /**
@@ -344,13 +360,15 @@ WebServer.prototype.showTaskStatus = function(req, res) {
  */
 WebServer.prototype.showTaskQueue = function(req, res) {
   'use strict';
+  var pending = this.getPendingTasks_();
   var buf = [];
-  for (var i in this.client_.jobQueue) {
-    var job = this.client_.jobQueue[i];
-    buf[i] = job.id + ' -> ' + JSON.stringify(job.task);
-  }
+
+  for (var i = 0; i < pending.length; i++) {
+    buf[i] = pending[i].id + ' -> ' + JSON.stringify(pending[i].taskDef);
+  };
+
   res.set('Content-Type', 'text/plain');
-  res.send('Total tasks: ' + this.client_.jobQueue.length +
+  res.send('Total tasks: ' + pending.length +
            '\n\n' + buf.join('\n\n'));
 };
 
@@ -365,8 +383,8 @@ WebServer.prototype.showTaskResult = function(req, res) {
   var id = req.params.id;
   var filename = req.params.filename;
 
-  var jobResult = this.client_.getJobResult(id);
-  var filepath = jobResult.getResultFile(filename);
+  var taskDir = task_manager.Task.deduceResultDir(id);
+  var filepath = path.join(taskDir, filename);
 
   fs.exists(filepath, function(exists) {
     if (exists) {
@@ -392,8 +410,7 @@ WebServer.prototype.statTaskResult = function(req, res) {
   var id = req.params.id;
   var filename = req.params.filename;
 
-  var jobResult = this.client_.getJobResult(id);
-  var filepath = jobResult.getResultFile(filename);
+  var filepath = task_manager.Task.deduceReusltFilePath(id, filename);
 
   fs.stat(filepath, function(err, stats) {
     if (err) {
@@ -415,10 +432,9 @@ WebServer.prototype.listTaskResult = function(req, res) {
   'use strict';
   var id = req.params.id;
 
-  var jobResult = this.client_.getJobResult(id);
-  var filepath = jobResult.getResultDir();
+  var resultDir = task_manager.Task.deduceResultDir();
 
-  fs.readdir(filepath, function(err, files) {
+  fs.readdir(resultDir, function(err, files) {
     if (err) {
       res.send(404, err);
     } else {

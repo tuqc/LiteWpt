@@ -3,6 +3,7 @@ var events = require('events');
 var fs = require('fs');
 var isrunning = require('isrunning');
 var logger = require('logger');
+var path = require('path');
 var util = require('util');
 
 // Sanity limit. Max tcp dump time to prevent too large dump file
@@ -25,9 +26,9 @@ function TaskManager(name, clientClass, maxConcurrent) {
   this.name = name;
   this.clientClass = clientClass;
   this.maxConcurrent = maxConcurrent || DEFAULT_COCURRENT;
-  // Pening taskdef queue.
+  // Pening task queue.
   this.pendingQueue = [];
-  // Finished taskdef queue.
+  // Finished task queue.
   this.finishedQueue = [];
   // Running task queue.
   this.runningQueue = [];
@@ -49,71 +50,100 @@ TaskManager.prototype.run = function() {
  */
 TaskManager.prototype.addTask = function(taskDef) {
   'use strict';
-  this.pendingQueue.push(taskDef);
+  if (taskDef.gid) {
+    // Gid short for group id, Here we don't allow 2 or more tasks
+    // with the same gid in the pending list.
+    var found = false;
+    for (var i = pendingQueue.length - 1; i >= 0; i--) {
+      var td = pendingQueue[i];
+      if (td.gid && td.gid == taskDef.gid) {
+        found = true;
+        break;
+      }
+    };
+
+    if (found) {
+      return {error: true, message: 'Duplicate gid.'};
+    }
+  };
+
+  var task = new Task(taskDef);
+  this.pendingQueue.push(task);
   this.emit('runnext');
+  return {id: task.id, position: this.pendingQueue.length};
 };
 
-/**
- * Finish task.
- * @param  {TaskDef} taskDef
- */
-TaskManager.prototype.finishTask = function(task) {
-  fs.writeFile(path, JSON.stringify(task.taskDef), (function(err) {
-    this.finishedQueue.push(task.taskDef);
-  }).bind(this));
 
+TaskManager.prototype.findTask = function(tid) {
+  for (var i = 0; i < this.pendingQueue.length; i++) {
+    if (this.pendingQueue[i].id == tid) {
+      return this.pendingQueue[i];
+    }
+  };
 
-};
+  for (var i = 0; i < this.runningQueue.length; i++) {
+    if (this.runningQueue[i].id == tid) {
+      return this.runningQueue[i];
+    }
+  };
+
+  for (var i = 0; i < this.finishedQueue.length; i++) {
+    if (this.finishedQueue[i].id == tid) {
+      return this.finishedQueue[i];
+    }
+  };
+
+  return undefined;
+}
+
 
 TaskManager.prototype.runNextTask = function() {
   if (this.runningQueue.length >= this.maxConcurrent) {
     logger.debug('%s too many task running now: %s',
                  this.name, this.runningQueue.length);
-    return;
   }
 
-  var taskDef = this.pendingQueue.shift();
-  if (taskDef) {
+  var task = this.pendingQueue.shift();
+  if (task) {
     logger.info('%s run job: %s', this.name , taskDef.id);
-    var task = new Task(taskDef);
     this.runningQueue.push(task);
+    task.setStatus(Task.Status.RUNNING);
     var client = new this.clientClass(this, task);
     client.run();
   }
-  return taskDef;
 };
 
 TaskManager.prototype.getBaseResultDir = function() {
   return DEFAULT_BASE_RESULT_DIR;
 };
 
-TaskManager.prototype.finishTask(task) {
-  this.runningQueue.remove(task.taskDef);
+TaskManager.prototype.finishTask = function(task) {
+  this.runningQueue.remove(task);
   logger.debug('%s Finish task %s', this.name, task.id);
 
-  if (this.runningQueue.length < this.maxConcurrent) {
-    this.emit('runnext');
+  task.taskDef.endTimestamp = moment().unix();
+
+  // Write the task.json
+  fs.writeFile(path, JSON.stringify(task.taskDef), (function(err) {
+    this.finishedQueue.push(task.taskDef);
+  }).bind(this));
+
+  if (this.tcpdump) this.stopTCPDump();
+
+  task.setStatus(Task.Status.FINISHED);
+
+  // Write result files and clear it.
+  task.flushResult();
+
+  // Add to finished task queue.
+  this.finishedQueue.push(task);
+  if (this.finishedQueue.length > 1000) {
+    this.finishedQueue.shift();
   }
 
-    if (this.tcpdump) this.stopTCPDump();
-  if (isRunFinished && this === this.client_.currentTask_) {
-    this.taskDef.endTimestamp = moment().unix();
-    this.finishedQueue.push(common_utils.cloneObject(this.taskDef));
-    if (this.finishedQueue.length > 1000) {
-      this..finishedQueue.shift();
-    }
-
-    this.resultFiles.push(
-        new ResultFile(ResultFile.ContentType.JSON,
-                      'task.json', JSON.stringify(this.taskDef)));
-    var jobResult = new TaskResult(this.id, this.client_.resultDir);
-
-    jobResult.writeResult(this.resultFiles, (function() {
-      this.resultFiles = [];
-      this.client_.finishRun_(this, isRunFinished);
-    }).bind(this));
-  } else {
-    this.client_.finishRun_(this, isRunFinished);
+  // Run next.
+  if (this.runningQueue.length < this.maxConcurrent) {
+    this.emit('runnext');
   }
 };
 
@@ -167,7 +197,8 @@ function Task(taskDef) {
   this.id = taskDef.id;
   this.taskResult = {};
   this.error = undefined;
-  thi.resultFiles = [];
+  this.resultFiles = [];
+  this.status = Task.Status.PENDING;
 }
 /** Public class. */
 exports.Task = Task;
@@ -184,6 +215,10 @@ Task.generateID = function(taskDef) {
   var dateStr = moment().format('YYYYMMDDHHmm');
   return dateStr + '_' + randStr;
 };
+
+Task.setStatus = function(status) {
+  this.status = status;
+}
 
 /**
  * Deduce test reuslt directory from task id.
@@ -203,13 +238,46 @@ Task.deduceResultDir = function(idStr) {
   return path;
 };
 
+Task.deduceReusltFilePath = function(tid, filename) {
+  var resultDir = Task.deduceResultDir(tid);
+  return path.join(resultDir, filename);
+};
+
 Task.prototype.setError = function(error) {
   this.error = error;
 };
 
+Task.prototype.flushResult = function(callback) {
+
+  var writeFile = (function(resultFile, fn) {
+    // Write File
+    var filePath = this.getResultFilePath(resultFile.filename);
+    fs.writeFile(filePath, resultFile.content, function(err) {
+      fn(err);
+      resultFile.content = undefined;
+    });
+  }).bind(this);
+
+  mkdirp(this.getResultDir(), (function(err) {
+    if (err) {
+      logger.error(err);
+    }
+    // Write result files
+    async.each(this.resultFiles, writeFile, function(err) {
+      if (err) {
+        logger.error('Write file error. %s', err);
+      }
+      this.resultFiles = undefined;
+      if (callback) {
+        callback();
+      }
+    });
+  }).bind(this));
+};
+
 Task.prototype.addResultFile = function(filename, content) {
   this.resultFiles.push({filename: filename, content: content});
-}
+};
 
 /**
  * Get task result directory.
@@ -218,6 +286,10 @@ Task.prototype.addResultFile = function(filename, content) {
 Task.prototype.getResultDir = function() {
   'use strict';
   return Task.deduceResultDir(this.id);
+};
+
+Task.prototype.getResultFilePath = function(filename) {
+  return path.join(this.getResultDir(), filename);
 };
 
 /**
@@ -234,6 +306,12 @@ Task.prototype.processHAR = function(harJson) {
     this.taskDef.success = false;
   }
 };
+
+Task.Status = Object.freeze({
+  RUNNING: 'running',
+  PENDING: 'pending',
+  FINISHED: 'finished'
+});
 
 Task.ResultFileName = Object.freeze({
   TASKDEF: 'task.json',
