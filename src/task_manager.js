@@ -1,10 +1,15 @@
-
+var async = require('async');
+var crypto = require('crypto');
+var common_utils = require('common_utils');
 var events = require('events');
 var fs = require('fs');
-var isrunning = require('isrunning');
+var isrunning = require('is-running');
 var logger = require('logger');
 var path = require('path');
+var moment = require('moment');
 var util = require('util');
+var process_utils = require('process_utils');
+var system_commands = require('system_commands');
 
 // Sanity limit. Max tcp dump time to prevent too large dump file
 var MAX_TCP_DUMP_TIME = 30 * 1000;
@@ -15,10 +20,12 @@ var DEFAULT_COCURRENT = 2;
 // Default directory of result file.
 var DEFAULT_BASE_RESULT_DIR = './result/';
 
+exports.DEFAULT_BASE_RESULT_DIR = DEFAULT_BASE_RESULT_DIR;
+
 /** Abstract agent class. */
-export TaskManager = TaskManager;
+exports.TaskManager = TaskManager;
 /** Public task class. */
-export Task = Task;
+exports.Task = Task;
 
 function TaskManager(name, clientClass, maxConcurrent) {
   'use strict';
@@ -37,10 +44,9 @@ util.inherits(TaskManager, events.EventEmitter);
 
 TaskManager.prototype.run = function() {
   'use strict';
-  throw new Error('Operation not implement.');
 
   this.on('runnext', function() {
-    this.runNext();
+    this.runNextTask();
   }.bind(this));
 };
 
@@ -105,7 +111,7 @@ TaskManager.prototype.runNextTask = function() {
 
   var task = this.pendingQueue.shift();
   if (task) {
-    logger.info('%s run job: %s', this.name , taskDef.id);
+    logger.info('%s run job: %s', this.name , task.id);
     this.runningQueue.push(task);
     task.setStatus(Task.Status.RUNNING);
     var client = new this.clientClass(this, task);
@@ -191,10 +197,10 @@ TaskManager.prototype.stopTCPDump = function() {
 function Task(taskDef) {
   'use strict';
   this.taskDef = taskDef;
-  if (!taskDef.id) {
-    taskDef.id = Task.generateID();
+  if (!this.taskDef.id) {
+    this.taskDef.id = Task.generateID(this.taskDef);
   }
-  this.id = taskDef.id;
+  this.id = this.taskDef.id;
   this.taskResult = {};
   this.error = undefined;
   this.resultFiles = [];
@@ -216,7 +222,7 @@ Task.generateID = function(taskDef) {
   return dateStr + '_' + randStr;
 };
 
-Task.setStatus = function(status) {
+Task.prototype.setStatus = function(status) {
   this.status = status;
 }
 

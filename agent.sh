@@ -81,7 +81,7 @@ start() {
   fi
 
   echo 'Start agent...'
-  $NODE ${ROOT_DIR}/src/agent_main.js ${cmd_arg} ${opt_args} </dev/null >$std_file 2>&1 &
+  $NODE ${ROOT_DIR}/src/server_main.js ${cmd_arg} ${opt_args} </dev/null >$std_file 2>&1 &
   echo $! > $lock_file
 }
 

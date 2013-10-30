@@ -50,7 +50,6 @@ function WebServer(taskMgrList, flags) {
   this.flags_ = flags;
   this.httpServer = express();
   this.httpPort = flags.port ? flags.port : 8888;
-  process_utils.injectWdAppLogging('main app', this.app_);
 
   this.staticDir = './static/';
   this.startDate = moment();
@@ -83,8 +82,10 @@ WebServer.prototype.run = function() {
   this.httpServer.get('/varz', this.varz.bind(this));
 
   this.httpServer.use('/static', express.static(this.staticDir));
-  this.httpServer.use('/archive', express.static(this.client_.resultDir));
-  this.httpServer.use('/archive', express.directory(this.client_.resultDir));
+  this.httpServer.use('/archive',
+                      express.static(task_manager.DEFAULT_BASE_RESULT_DIR));
+  this.httpServer.use('/archive',
+                      express.directory(task_manager.DEFAULT_BASE_RESULT_DIR));
 
   process.on('uncaughtException', function(err) {
     console.error(err);
@@ -96,7 +97,6 @@ WebServer.prototype.run = function() {
 
   console.log('Start HTTP server with port=' + this.httpPort);
   this.httpServer.listen(this.httpPort);
-  this.client_.run();
 };
 
 /**
@@ -347,7 +347,7 @@ WebServer.prototype.showTaskStatus = function(req, res) {
         }
       });
     } else {
-      res.json({'status': task.status);
+      res.json({'status': task.status});
     }
   }
 };
@@ -480,12 +480,12 @@ exports.main = function(flags) {
   delete flags.argv; // Remove nopt dup
 
   var taskMgrList = [];
-  var wd_manager = task_manager.TaskManager('chrome',
+  var wd_manager = new task_manager.TaskManager('chrome',
                                             wd_client.WebDriverClient, 1);
   wd_manager.run();
   taskMgrList.push(wd_manager);
 
-  var webServer = WebServer(taskMgrList, flags);
+  var webServer = new WebServer(taskMgrList, flags);
   webServer.run();
 };
 
@@ -493,6 +493,8 @@ if (require.main === module) {
   try {
     exports.main(nopt(knownOpts, {}, process.argv, 2));
   } catch (e) {
+    console.log(e.stack);
+
     logger.error('%j', e);
     process.exit(-1);
   }

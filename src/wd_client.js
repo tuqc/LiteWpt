@@ -1,15 +1,35 @@
+var async = require('async');
+var child_process = require('child_process');
+var common_utils = require('common_utils');
+var events = require('events');
+var fs = require('fs');
+var fs_extra = require('fs-extra');
+var har = require('har');
+var http = require('http');
+var isrunning = require('is-running');
+var logger = require('logger');
+var mkdirp = require('mkdirp');
+var moment = require('moment');
+var path = require('path');
+var process_utils = require('process_utils');
 var task_manager = require('task_manager');
+var system_commands = require('system_commands');
+var util = require('util');
+var webdriver = require('webdriver');
+
 
 var DEFAULT_TASK_TIMEOUT = 60000; // 60 seconds
 // Wait for 5 seconds before force-killing
 var WD_SERVER_EXIT_TIMEOUT = 5000;
+
+exports.WebDriverClient = WebDriverClient;
 
 function WebDriverClient(clientMgr, task, flags) {
   'use strict';
   this.clientMgr_ = clientMgr;
   this.task_ = task;
   this.flags_ = flags;
-  this.taskDef_ = task.taskDef_;
+  this.taskDef_ = task.taskDef;
 
   this.taskTimeout = task.timeout || DEFAULT_TASK_TIMEOUT;
   this.app_ = webdriver.promise.Application.getInstance();
@@ -23,7 +43,7 @@ function WebDriverClient(clientMgr, task, flags) {
  */
 WebDriverClient.prototype.run = function() {
   'use strict';
-  exports.process.on('uncaughtException',
+  process.on('uncaughtException',
                      this.onUncaughtException_.bind(this));
 
   if (!this.wdServer_) {
@@ -33,19 +53,18 @@ WebDriverClient.prototype.run = function() {
       if ('done' === ipcMsg.cmd || 'error' === ipcMsg.cmd) {
         if ('error' === ipcMsg.cmd) {
           this.task.setError(ipcMsg.e);
-          job.error = ipcMsg.e;
         }
-        this.scheduleProcessDone_(ipcMsg, job);
+        this.scheduleProcessDone_(ipcMsg);
         this.scheduleCleanup_();
       }
     }.bind(this));
   }
-  if (this.taskDef.tcpdump) {
+  if (this.taskDef_.tcpdump) {
       this.clientMgr_.startTCPDump();
   }
 
-  var script = this.taskDef.script;
-  var url = this.taskDef.url;
+  var script = this.taskDef_.script;
+  var url = this.taskDef_.url;
   this.scheduleNoFault_('Send IPC "run"', function() {
     var message = {
         cmd: 'run',
@@ -53,7 +72,7 @@ WebDriverClient.prototype.run = function() {
         exitWhenDone: true,
         script: script,
         url: url,
-        timeout: this.taskDef.timeout || DEFAULT_TASK_TIMEOUT
+        timeout: this.taskDef_.timeout || DEFAULT_TASK_TIMEOUT
       };
     if (this.taskDef_.proxyPacUrl) {
       message.proxyPacUrl = this.taskDef_.proxyPacUrl;
@@ -108,7 +127,7 @@ WebDriverClient.prototype.finishRun_ = function() {
 WebDriverClient.prototype.onUncaughtException_ = function(e) {
   'use strict';
   logger.critical('Unhandled exception in the client: %s', e);
-  this.task.setError(e);
+  this.task_.setError(e);
   // TODO
 };
 
