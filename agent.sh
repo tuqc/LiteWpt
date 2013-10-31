@@ -25,6 +25,7 @@ stop() {
   fi
   echo 'Kill all tcpdump...'
   killall tcpdump &>1 >/dev/null
+  killall node &>1 >/dev/null
 }
 
 
@@ -107,7 +108,7 @@ case "$CMD" in
             start
             sleep 2
             status
-            ;;         
+            ;;
         stop)
             stop
             ;;
@@ -115,7 +116,7 @@ case "$CMD" in
             force_stop
             sleep 2
             status
-            ;;         
+            ;;
         status)
             status
             ;;
@@ -123,10 +124,10 @@ case "$CMD" in
             stop
             sleep 2
             start
-            ;;                 
+            ;;
         start_xvfb)
           start_xvfb
-          ;;             
+          ;;
         stop_xvfb)
           stop_xvfb
           ;;

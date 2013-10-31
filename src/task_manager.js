@@ -16,7 +16,7 @@ var MAX_TCP_DUMP_TIME = 30 * 1000;
 // Max days job data will be kept on disk.
 var MAX_JOB_KEEP_DAYS = 5; // 5 days
 // Max test running at the same time.
-var DEFAULT_COCURRENT = 2;
+var DEFAULT_COCURRENT = 1;
 // Default directory of result file.
 var DEFAULT_BASE_RESULT_DIR = './result/';
 
@@ -27,18 +27,19 @@ exports.TaskManager = TaskManager;
 /** Public task class. */
 exports.Task = Task;
 
-function TaskManager(name, clientClass, maxConcurrent) {
+function TaskManager(name, clientClass, flags) {
   'use strict';
   events.EventEmitter.call(this);
   this.name = name;
   this.clientClass = clientClass;
-  this.maxConcurrent = maxConcurrent || DEFAULT_COCURRENT;
+  this.maxConcurrent = DEFAULT_COCURRENT;
   // Pening task queue.
   this.pendingQueue = [];
   // Finished task queue.
   this.finishedQueue = [];
   // Running task queue.
   this.runningQueue = [];
+  this.flags_ = flags;
 }
 util.inherits(TaskManager, events.EventEmitter);
 
@@ -114,7 +115,7 @@ TaskManager.prototype.runNextTask = function() {
     logger.info('%s run job: %s', this.name , task.id);
     this.runningQueue.push(task);
     task.setStatus(Task.Status.RUNNING);
-    var client = new this.clientClass(this, task);
+    var client = new this.clientClass(this, task, this.flags_);
     client.run();
   }
 };
@@ -157,12 +158,14 @@ TaskManager.prototype.finishTask = function(task) {
  * Start tcp dump raw binary meesgae
  */
 TaskManager.prototype.startTCPDump = function(task) {
-  //var jobResult = this.client_.getTaskResult(this.id);
- // this.tcpdumpRawFile = jobResult.getResultFile('tcpdump.raw');
-  this.dumpFilePath = path.join(task.getResultDir(), Task.ResultFile.TCPDUMP);
+  //Check if tcpdump already running.
+  if (this.tcpdumpProcess) {
+    return;
+  }
+  var dumpFilePath = path.join(task.getResultDir(), Task.ResultFile.TCPDUMP);
   jobResult.mkdirp((function(err) {
     this.tcpdumpProcess = child_process.spawn(
-        'tcpdump', ['-w', this.dumpFilePath]);
+        'tcpdump', ['-w', dumpFilePath]);
     this.tcpdumpPid = this.tcpdumpProcess.pid;
     // Stop the tcpdump when timeout.
     global.setTimeout((function() {
@@ -188,8 +191,8 @@ TaskManager.prototype.stopTCPDump = function() {
           child_process.spawn('kill', ['-9', '' + pid])
         }
       });
+      this.tcpdumpProcess = undefined;
     }).bind(this), 30 * 1000);
-    this.tcpdumpProcess = undefined;
   }
 };
 

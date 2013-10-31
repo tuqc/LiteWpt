@@ -157,17 +157,17 @@ WebServer.prototype.resolveIP = function(req, res) {
 };
 
 WebServer.prototype.getRunningTasks_ = function() {
-  var runningQueue = [];
+  var running = [];
   for (var i = this.taskMgrList_.length - 1; i >= 0; i--) {
-    runningQueue.concat(this.taskMgrList_[i].runningQueue);
+    running = running.concat(this.taskMgrList_[i].runningQueue);
   };
-  return runningQueue;
+  return running;
 }
 
 WebServer.prototype.getPendingTasks_ = function() {
   var pending = [];
   for (var i = this.taskMgrList_.length - 1; i >= 0; i--) {
-    pending.concat(this.taskMgrList_[i].pendingQueue);
+    pending = pending.concat(this.taskMgrList_[i].pendingQueue);
   };
   return pending;
 }
@@ -175,7 +175,7 @@ WebServer.prototype.getPendingTasks_ = function() {
 WebServer.prototype.getFinishedTasks_ = function() {
   var finished = [];
   for (var i = this.taskMgrList_.length - 1; i >= 0; i--) {
-    finished.concat(this.taskMgrList_[i].finishedQueue);
+    finished = finished.concat(this.taskMgrList_[i].finishedQueue);
   };
   return finished;
 }
@@ -234,13 +234,13 @@ WebServer.prototype.showSummary = function(req, res) {
            ' target=_blank>Submit Test</a><br>');
   var i = 0;
   for (i = runningTasks.length - 1; i >= 0; i--) {
-    buf.push(common_utils.task2Html(runningTasks[i]) + '<br>');
+    buf.push(common_utils.task2Html(runningTasks[i].taskDef) + '<br>');
   };
 
   buf.push('<strong>Waiting Jobs:</strong>' + pendingTasks.length +'<br>');
 
   for (i = pendingTasks.length - 1; i >= 0; i--) {
-    buf.push(common_utils.task2Html(pendingTasks[i]) + '<br>');
+    buf.push(common_utils.task2Html(pendingTasks[i].taskDef) + '<br>');
   };
 
 
@@ -248,7 +248,7 @@ WebServer.prototype.showSummary = function(req, res) {
            finishedTasks.length + ')<br>');
 
   for (i = finishedTasks.length - 1; i >= 0; --i) {
-    buf.push(common_utils.task2Html(finishedTasks[i]) + '<br>');
+    buf.push(common_utils.task2Html(finishedTasks[i].taskDef) + '<br>');
   }
 
   buf.push('</body></html>');
@@ -262,7 +262,6 @@ WebServer.prototype.showSummary = function(req, res) {
  * task = {
  *   "url":"",
  *   "runs": 1,
- *   "fvonly": 0,
  *   "proxyPacUrl": "",  //optional
  *   "proxyServer": "",  //optional
  *   "script":"driver = new
@@ -481,7 +480,7 @@ exports.main = function(flags) {
 
   var taskMgrList = [];
   var wd_manager = new task_manager.TaskManager('chrome',
-                                            wd_client.WebDriverClient, 1);
+                                            wd_client.WebDriverClient, flags);
   wd_manager.run();
   taskMgrList.push(wd_manager);
 
