@@ -6,6 +6,7 @@ var fs = require('fs');
 var isrunning = require('is-running');
 var logger = require('logger');
 var path = require('path');
+var mkdirp = require('mkdirp');
 var moment = require('moment');
 var util = require('util');
 var process_utils = require('process_utils');
@@ -125,15 +126,20 @@ TaskManager.prototype.getBaseResultDir = function() {
 };
 
 TaskManager.prototype.finishTask = function(task) {
-  this.runningQueue.remove(task);
   logger.debug('%s Finish task %s', this.name, task.id);
+  var index = this.runningQueue.indexOf(task);
+  if (index > -1) {
+    this.runningQueue.splice(index, 1);
+  } else {
+    return;
+  }
 
   task.taskDef.endTimestamp = moment().unix();
 
   // Write the task.json
-  fs.writeFile(path, JSON.stringify(task.taskDef), (function(err) {
-    this.finishedQueue.push(task.taskDef);
-  }).bind(this));
+  // fs.writeFile(path, JSON.stringify(task.taskDef), (function(err) {
+  //   this.finishedQueue.push(task.taskDef);
+  // }).bind(this));
 
   if (this.tcpdump) this.stopTCPDump();
 
@@ -240,11 +246,11 @@ Task.deduceResultDir = function(idStr) {
   var align = function(num) {
     return num >= 10 ? '' + num : '0' + num;
   };
-  var path = util.format('%s/%s/%s/%s/%s/%s', this.baseDir,
-                         align(date.year()), align(date.month() + 1),
-                         align(date.date()), align(date.hour()),
-                         this.id);
-  return path;
+  var finalPath = path.join(DEFAULT_BASE_RESULT_DIR,
+                            align(date.year()), align(date.month() + 1),
+                            align(date.date()), align(date.hour()),
+                            idStr);
+  return finalPath;
 };
 
 Task.deduceReusltFilePath = function(tid, filename) {
@@ -257,10 +263,12 @@ Task.prototype.setError = function(error) {
 };
 
 Task.prototype.flushResult = function(callback) {
-
+  logger.info('Flush task %s result to %s', this.id, this.getResultDir());
   var writeFile = (function(resultFile, fn) {
+
     // Write File
     var filePath = this.getResultFilePath(resultFile.filename);
+    logger.info('Write %s to %s', resultFile.filename, filePath);
     fs.writeFile(filePath, resultFile.content, function(err) {
       fn(err);
       resultFile.content = undefined;
@@ -280,12 +288,18 @@ Task.prototype.flushResult = function(callback) {
       if (callback) {
         callback();
       }
-    });
+    }.bind(this));
   }).bind(this));
 };
 
 Task.prototype.addResultFile = function(filename, content) {
-  this.resultFiles.push({filename: filename, content: content});
+  if (filename && content) {
+    logger.info('Task %s add result %s, len=%s',
+                this.id, filename, content.length);
+    this.resultFiles.push({filename: filename, content: content});
+  } else {
+    logger.warn('Task %s add empty file %s', this.id, filename);
+  }
 };
 
 /**

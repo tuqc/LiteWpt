@@ -107,7 +107,7 @@ WebDriverClient.prototype.taskTimeout_ = function() {
 WebDriverClient.prototype.finishRun_ = function() {
   'use strict';
   logger.info('Finished run task %s.', this.task.id);
-  this.clientMgr.finishTask(this.task);
+//  this.clientMgr.finishTask(this.task);
 };
 
 
@@ -132,6 +132,7 @@ WebDriverClient.prototype.onUncaughtException_ = function(e) {
  */
 WebDriverClient.prototype.scheduleNoFault_ = function(description, f) {
   'use strict';
+  logger.info('Schedule no fault: %s', description);
   return process_utils.scheduleNoFault(this.app_, description, f);
 };
 
@@ -142,6 +143,7 @@ WebDriverClient.prototype.scheduleNoFault_ = function(description, f) {
  */
 WebDriverClient.prototype.startWdServer_ = function() {
   'use strict';
+  logger.info('Start wd server.');
   if (this.wdServer_) return;
   this.wdServer_ = child_process.fork('./src/wd_server.js',
       [], {env: process.env});
@@ -174,6 +176,7 @@ WebDriverClient.prototype.startWdServer_ = function() {
  */
 WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
   'use strict';
+  logger.info('Schedule process done.');
   this.scheduleNoFault_('Process job results', function() {
     if (ipcMsg.devToolsMessages) {
       var devMessage = JSON.stringify(ipcMsg.devToolsMessages);
@@ -181,11 +184,13 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
                               devMessage);
       var harJson = har.parseFromText(devMessage);
       this.task.processHAR(harJson);
-      this.task.addResultFile(task_manager.Task.ResultFileName.HAR, harJson);
+      this.task.addResultFile(task_manager.Task.ResultFileName.HAR,
+                              JSON.stringify(harJson));
     }
+    logger.info('Screenshot number = %s', ipcMsg.screenshots.length);
     if (ipcMsg.screenshots && ipcMsg.screenshots.length > 0) {
       ipcMsg.screenshots.forEach(function(screenshot, index) {
-        logger.debug('Adding screenshot %s', screenshot.fileName);
+        logger.info('Adding screenshot %s: %s', index, screenshot.fileName);
 
         process_utils.scheduleFunctionNoFault(this.app_,
             'Read ' + screenshot.diskPath,
@@ -200,6 +205,8 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
             }.bind(this));
       }.bind(this));
     };
+    this.scheduleNoFault_('Finishe task',
+        (this.clientMgr.finishTask(this.task)).bind(this));
   }.bind(this));
 };
 
@@ -207,8 +214,9 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
  * @param {Object} job the job to abort (e.g. due to timeout).
  * @private
  */
-WebDriverClient.prototype.abortTask_ = function(job) {
+WebDriverClient.prototype.abortTask_ = function(task) {
   'use strict';
+  logger.info('Abort task %s', task.id);
   if (this.wdServer_) {
     this.scheduleNoFault_('Remove message listener',
       this.wdServer_.removeAllListeners.bind(this.wdServer_, 'message'));
@@ -216,8 +224,8 @@ WebDriverClient.prototype.abortTask_ = function(job) {
         this.wdServer_.send.bind(this.wdServer_, {cmd: 'abort'}));
   }
   this.scheduleCleanup_();
-  this.scheduleNoFault_('Timed out job finished',
-      job.runFinished.bind(job, /*isRunFinished=*/true));
+  // this.scheduleNoFault_('Timed out job finished',
+  //     job.runFinished.bind(job, /*isRunFinished=*/true));
 };
 
 /**
@@ -227,6 +235,7 @@ WebDriverClient.prototype.abortTask_ = function(job) {
  */
 WebDriverClient.prototype.scheduleCleanRunTempDir_ = function() {
   'use strict';
+  logger.info('Start clean run temp directory.');
   process_utils.scheduleFunctionNoFault(this.app_, 'Tmp check',
       fs.exists, this.runTempDir_).then(function(exists) {
     if (exists) {
@@ -252,10 +261,11 @@ WebDriverClient.prototype.scheduleCleanRunTempDir_ = function() {
  */
 WebDriverClient.prototype.scheduleCleanup_ = function() {
   'use strict';
+  logger.info('Start task clean up.');
   if (this.wdServer_) {
     this.scheduleNoFault_('Remove message listener',
         this.wdServer_.removeAllListeners.bind(this.wdServer_, 'message'));
-    process_utils.scheduleWait(this.wdServer_, 'wd_server',
+    process_utils.scheduleWait(this.app_, this.wdServer_, 'wd_server',
           WD_SERVER_EXIT_TIMEOUT).then(function() {
       // This assumes a clean exit with no zombies
       this.wdServer = undefined;
