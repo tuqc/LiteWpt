@@ -197,6 +197,9 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
     }
     logger.info('Screenshot number = %s', ipcMsg.screenshots.length);
     if (ipcMsg.screenshots && ipcMsg.screenshots.length > 0) {
+      //Reverse the screenshots, because latest is more important.
+      ipcMsg.screenshots.reverse();
+
       ipcMsg.screenshots.forEach(function(screenshot, index) {
         logger.info('Adding screenshot %s: %s', index, screenshot.diskPath);
 
@@ -225,14 +228,18 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
  */
 WebDriverClient.prototype.abort = function() {
   'use strict';
-  logger.info('Abort task %s', this.task.id);
+  logger.info('Abort task %s(%s)', this.task.id, this.task.status);
+  if (this.task.isFinished()) {
+    logger.warn('Task %s already aborted', this.task.id);
+    return;
+  }
   if (this.wdServer_) {
     this.scheduleNoFault_('Remove message listener',
       this.wdServer_.removeAllListeners.bind(this.wdServer_, 'message'));
     this.scheduleNoFault_('Send IPC "abort"',
         this.wdServer_.send.bind(this.wdServer_, {cmd: 'abort'}));
   }
-  this.task.setStatus(Task.Status.ABORTED);
+  this.task.setStatus(task_manager.Task.Status.ABORTED);
   this.scheduleNoFault_('Finishe task',
      this.clientMgr.finishTask.bind(this.clientMgr, this.task));
   this.scheduleCleanup_();

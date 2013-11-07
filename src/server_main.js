@@ -323,28 +323,39 @@ WebServer.prototype.showTaskStatus = function(req, res) {
     task = this.taskMgrList_[i].findTask(id);
   };
 
+  // Not in memory queue.
+  if (!task) {
+    var taskDir = task_manager.Task.deduceResultDir(id);
+    var filepath = path.join(taskDir, 'task.json');
+
+    fs.readFile(filepath, function(err, data) {
+      if (err) {
+        res.send(404, 'Not found anywhere.' + id);
+      } else {
+        var taskDef = JSON.parse(data);
+        if (taskDef) {
+          res.json({'status': task_manager.Task.Status.FINISHED,
+                    'success': taskDef.success || false});
+          return;
+        } else {
+          res.json(500, 'Task record error: ' + data);
+          return;
+        }
+      }
+    });
+  } else {
+    var status = task_manager.Task.Status.FINISHED;
+    if (!task.isFinished()) {
+      status = task.status;
+    }
+    res.json({'status': status});
+  }
+
   if (!task) {
     res.send(404, 'Not found ' + id);
   } else {
-
     //Finished task
     if (task.status = task_manager.Task.Status.FINISHED) {
-      var filepath = task.getResultFilePath('task.json');
-      fs.readFile(filepath, function(err, data) {
-        if (err) {
-          res.send(404, 'Not found ' + id);
-        } else {
-          var taskDef = JSON.parse(data);
-          if (taskDef) {
-            res.json({'status': task_manager.Task.Status.FINISHED,
-                      'success': taskDef.success || false});
-            return;
-          } else {
-            res.json(500, 'Task record error: ' + data);
-            return;
-          }
-        }
-      });
     } else {
       res.json({'status': task.status});
     }

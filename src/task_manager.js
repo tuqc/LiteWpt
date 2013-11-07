@@ -127,6 +127,11 @@ TaskManager.prototype.runNextTask = function() {
     task.setStatus(Task.Status.RUNNING);
     var client = new this.clientClass(this, task, this.flags_);
     client.run();
+
+    //Abort test if timeout, 45 second.
+    global.setTimeout(function(){
+      client.abort();
+    }.bind(client), 45000);
   }
 };
 
@@ -135,7 +140,7 @@ TaskManager.prototype.getBaseResultDir = function() {
 };
 
 TaskManager.prototype.finishTask = function(task) {
-  logger.debug('%s Finish task %s', this.name, task.id);
+  logger.info('%s Finish task %s', this.name, task.id);
   var index = this.runningQueue.indexOf(task);
   if (index > -1) {
     this.runningQueue.splice(index, 1);
@@ -228,11 +233,17 @@ Task.prototype.setError = function(error) {
   this.error = error;
 };
 
+Task.prototype.isFinished = function() {
+  return (this.status == Task.Status.FINISHED ||
+          this.status == Task.Status.ABORTED);
+}
+
 Task.prototype.flushResult = function(callback) {
   logger.info('Flush task %s(%s) result to %s',
               this.id, this.status, this.getResultDir());
 
   if (this.status == Task.Status.ABORTED) {
+    this.taskDef.success = false;
     this.taskDef.abort = true;
   } else {
     if (this.resultFiles.length > 0) {

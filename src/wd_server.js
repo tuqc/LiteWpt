@@ -45,7 +45,7 @@ var DETACH_TIMEOUT_MS_ = 2000;
 var SUBMIT_TIMEOUT_MS_ = 5000;
 
 /** Allow test access. */
-exports.WAIT_AFTER_ONLOAD_MS = 10000;
+exports.WAIT_AFTER_ONLOAD_MS = 30000;
 
 var BLANK_PAGE_URL_ = 'data:text/html;charset=utf-8,';
 var GHASTLY_ORANGE_ = '#DE640D';
