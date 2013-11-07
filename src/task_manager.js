@@ -1,4 +1,5 @@
 var async = require('async');
+var child_process = require('child_process');
 var crypto = require('crypto');
 var common_utils = require('common_utils');
 var events = require('events');
@@ -142,6 +143,7 @@ TaskManager.prototype.finishTask = function(task) {
     return;
   }
 
+  if (task.taskDef.tcpdump) task.stopTCPDump();
   task.taskDef.endTimestamp = moment().unix();
 
   // Write the task.json
@@ -149,7 +151,6 @@ TaskManager.prototype.finishTask = function(task) {
   //   this.finishedQueue.push(task.taskDef);
   // }).bind(this));
 
-  if (this.tcpdump) this.stopTCPDump();
 
   task.setStatus(Task.Status.FINISHED);
 
@@ -167,49 +168,6 @@ TaskManager.prototype.finishTask = function(task) {
     this.emit('runnext');
   }
 };
-
-/**
- * Start tcp dump raw binary meesgae
- */
-TaskManager.prototype.startTCPDump = function(task) {
-  //Check if tcpdump already running.
-  if (this.tcpdumpProcess) {
-    return;
-  }
-  var dumpFilePath = path.join(task.getResultDir(), Task.ResultFile.TCPDUMP);
-  jobResult.mkdirp((function(err) {
-    this.tcpdumpProcess = child_process.spawn(
-        'tcpdump', ['-w', dumpFilePath]);
-    this.tcpdumpPid = this.tcpdumpProcess.pid;
-    // Stop the tcpdump when timeout.
-    global.setTimeout((function() {
-      this.stopTCPDump();
-    }).bind(this), MAX_TCP_DUMP_TIME);
-  }).bind(this));
-};
-
-/**
- * Stop tcpdump process.
- */
-TaskManager.prototype.stopTCPDump = function() {
-  if (this.tcpdumpProcess) {
-    this.tcpdumpProcess.kill('SIGTERM');
-    global.setTimeout((function() {
-      if (!this.tcpdumpPid) {
-        return;
-      }
-      var pid = this.tcpdumpPid;
-      // Double check, kill it if process is live.
-      isrunning(pid, function(err, live) {
-        if (live) {
-          child_process.spawn('kill', ['-9', '' + pid])
-        }
-      });
-      this.tcpdumpProcess = undefined;
-    }).bind(this), 30 * 1000);
-  }
-};
-
 
 function Task(taskDef) {
   'use strict';
@@ -348,6 +306,48 @@ Task.prototype.processHAR = function(harJson) {
     this.taskDef.success = true;
   } else {
     this.taskDef.success = false;
+  }
+};
+
+/**
+ * Start tcp dump raw binary, it could kill himself after timeout.
+ */
+Task.prototype.startTCPDump = function() {
+  //Check if tcpdump already running.
+  if (this.tcpdumpProcess) {
+    return;
+  }
+  var dumpFilePath = this.getResultFilePath(Task.ResultFileName.TCPDUMP);
+  logger.info('Start tcp dump for %s to %s', this.id, dumpFilePath);
+  this.tcpdumpProcess = child_process.spawn('tcpdump', ['-w', dumpFilePath]);
+  this.tcpdumpPid = this.tcpdumpProcess.pid;
+
+  // Stop the tcpdump when timeout.
+  global.setTimeout((function() {
+    this.stopTCPDump();
+  }).bind(this), MAX_TCP_DUMP_TIME);
+};
+
+/**
+ * Stop tcpdump process.
+ */
+Task.prototype.stopTCPDump = function() {
+  logger.info('Stop tcp dump for %s', this.id);
+  if (this.tcpdumpProcess) {
+    this.tcpdumpProcess.kill('SIGTERM');
+    global.setTimeout((function() {
+      if (!this.tcpdumpPid) {
+        return;
+      }
+      var pid = this.tcpdumpPid;
+      // Double check, kill it if process is live.
+      isrunning(pid, function(err, live) {
+        if (live) {
+          child_process.spawn('kill', ['-9', '' + pid])
+        }
+      });
+      this.tcpdumpProcess = undefined;
+    }).bind(this), 30 * 1000);
   }
 };
 

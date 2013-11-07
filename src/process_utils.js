@@ -463,7 +463,7 @@ exports.scheduleFunction = function(app, description, f,
   }
   var args = Array.prototype.slice.apply(arguments).slice(3).concat([cb]);
   return app.schedule(description, function() {
-    logger.debug('Calling %s', description);
+    logger.info('Calling %s', description);
     f.apply(undefined, args);
     return done.promise;
   });

@@ -48,13 +48,19 @@ WebDriverClient.prototype.run = function() {
   if (!this.wdServer_) {
     this.startWdServer_();
   }
-  if (this.taskDef.tcpdump) {
-      this.clientMgr.startTCPDump();
-  }
 
   process_utils.scheduleFunctionNoFault(this.app_,
             'Create ' + this.runTempDir_,
             mkdirp, this.runTempDir_);
+
+  process_utils.scheduleFunctionNoFault(this.app_,
+            'Create ' + this.task.getResultDir(),
+            mkdirp, this.task.getResultDir());
+
+  if (this.taskDef.tcpdump) {
+      this.scheduleNoFault_('Start tcpdump',
+                            this.task.startTCPDump.bind(this.task));
+  }
 
   var script = this.taskDef.script;
   var url = this.taskDef.url;
@@ -95,7 +101,7 @@ WebDriverClient.prototype.taskTimeout_ = function() {
       this.wdServer_.send({cmd: 'abort'});
     }.bind(this));
   }
-  if (this.taskDef.tcpdump) this.clientMgr.stopTCPDump();
+  if (this.taskDef.tcpdump) this.stopTCPDump();
   this.scheduleNoFault_('Timed out job finished',
                         (this.clientMgr.runFinished(false, true)).bind(this));
   this.scheduleCleanup_();
@@ -199,8 +205,9 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
             fs.readFile, screenshot.diskPath).then(function(buffer) {
               var fileName = task_manager.Task.ResultFileName.SCREENSHOT;
               if (index >= 1) {
-                fileName = task_manager.Task.ResultFileName.SCREENSHOT +
-                    '_' + index;
+                var extname = path.extname(fileName);
+                var basename = path.basename(fileName, extname);
+                fileName = basename + '_' + index + extname;
               }
               this.task.addResultFile(fileName, buffer);
               index += 1;
