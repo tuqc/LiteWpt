@@ -68,8 +68,8 @@ TaskManager.prototype.addTask = function(taskDef) {
     // Gid short for group id, Here we don't allow 2 or more tasks
     // with the same gid in the pending list.
     var found = false;
-    for (var i = pendingQueue.length - 1; i >= 0; i--) {
-      var td = pendingQueue[i];
+    for (var i = this.pendingQueue.length - 1; i >= 0; i--) {
+      var td = this.pendingQueue[i];
       if (td.gid && td.gid == taskDef.gid) {
         found = true;
         break;

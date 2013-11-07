@@ -13,7 +13,6 @@ var path = require('path');
 var process_utils = require('process_utils');
 var system_commands = require('system_commands');
 var util = require('util');
-var webdriver = require('webdriver');
 var task_manager = require('task_manager');
 var wd_client = require('wd_client');
 
