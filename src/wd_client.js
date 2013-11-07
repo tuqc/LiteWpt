@@ -21,6 +21,8 @@ var util = require('util');
 var DEFAULT_TASK_TIMEOUT = 60000; // 60 seconds
 // Wait for 5 seconds before force-killing
 var WD_SERVER_EXIT_TIMEOUT = 5000;
+// Temp directory for temp data.
+var DEFAULT_TEMP_DIR = '/tmp/webtestserver/';
 
 exports.WebDriverClient = WebDriverClient;
 
@@ -32,11 +34,9 @@ function WebDriverClient(clientMgr, task, flags) {
   this.taskDef = task.taskDef;
   this.taskTimeout = task.timeout || DEFAULT_TASK_TIMEOUT;
 
-  this.runTempDir_ = '/tmp/' + task.id;
-  fs.mkdirSync(this.runTempDir_);
+  this.runTempDir_ = path.join(DEFAULT_TEMP_DIR, task.id);
   this.app_ = webdriver.promise.controlFlow();
   process_utils.injectWdAppLogging('main app', this.app_);
-
 }
 
 /**
@@ -45,15 +45,16 @@ function WebDriverClient(clientMgr, task, flags) {
  */
 WebDriverClient.prototype.run = function() {
   'use strict';
-  process.on('uncaughtException',
-             this.onUncaughtException_.bind(this));
-
   if (!this.wdServer_) {
     this.startWdServer_();
   }
   if (this.taskDef.tcpdump) {
       this.clientMgr.startTCPDump();
   }
+
+  process_utils.scheduleFunctionNoFault(this.app_,
+            'Create ' + this.runTempDir_,
+            mkdirp, this.runTempDir_);
 
   var script = this.taskDef.script;
   var url = this.taskDef.url;
@@ -215,15 +216,18 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
  * @param {Object} job the job to abort (e.g. due to timeout).
  * @private
  */
-WebDriverClient.prototype.abortTask_ = function(task) {
+WebDriverClient.prototype.abort = function() {
   'use strict';
-  logger.info('Abort task %s', task.id);
+  logger.info('Abort task %s', this.task.id);
   if (this.wdServer_) {
     this.scheduleNoFault_('Remove message listener',
       this.wdServer_.removeAllListeners.bind(this.wdServer_, 'message'));
     this.scheduleNoFault_('Send IPC "abort"',
         this.wdServer_.send.bind(this.wdServer_, {cmd: 'abort'}));
   }
+  this.task.setStatus(Task.Status.ABORTED);
+  this.scheduleNoFault_('Finishe task',
+     this.clientMgr.finishTask.bind(this.clientMgr, this.task));
   this.scheduleCleanup_();
   // this.scheduleNoFault_('Timed out job finished',
   //     job.runFinished.bind(job, /*isRunFinished=*/true));
@@ -253,6 +257,8 @@ WebDriverClient.prototype.scheduleCleanRunTempDir_ = function() {
           fs.mkdir, this.runTempDir_);
     }
   }.bind(this));
+  process_utils.scheduleFunction(this.app_, 'Remove dir ' + this. runTempDir_,
+                                 fs.rmdir, this. runTempDir_)
 };
 
 /**

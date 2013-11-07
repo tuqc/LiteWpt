@@ -17,7 +17,7 @@ var MAX_TCP_DUMP_TIME = 30 * 1000;
 // Max days job data will be kept on disk.
 var MAX_JOB_KEEP_DAYS = 5; // 5 days
 // Max test running at the same time.
-var DEFAULT_COCURRENT = 1;
+var DEFAULT_COCURRENT = 2;
 // Default directory of result file.
 var DEFAULT_BASE_RESULT_DIR = './result/';
 
@@ -46,6 +46,12 @@ util.inherits(TaskManager, events.EventEmitter);
 
 TaskManager.prototype.run = function() {
   'use strict';
+
+  process.on('uncaughtException', function(e) {
+    if (e) {
+      logger.warn(e.stack);
+    }
+  });
 
   this.on('runnext', function() {
     this.runNextTask();
@@ -109,11 +115,13 @@ TaskManager.prototype.runNextTask = function() {
   if (this.runningQueue.length >= this.maxConcurrent) {
     logger.debug('%s too many task running now: %s',
                  this.name, this.runningQueue.length);
+    return;
   }
 
   var task = this.pendingQueue.shift();
   if (task) {
     logger.info('%s run job: %s', this.name , task.id);
+    task.taskDef.startTimestamp = moment().unix();
     this.runningQueue.push(task);
     task.setStatus(Task.Status.RUNNING);
     var client = new this.clientClass(this, task, this.flags_);
@@ -263,10 +271,23 @@ Task.prototype.setError = function(error) {
 };
 
 Task.prototype.flushResult = function(callback) {
-  logger.info('Flush task %s result to %s', this.id, this.getResultDir());
-  var writeFile = (function(resultFile, fn) {
+  logger.info('Flush task %s(%s) result to %s',
+              this.id, this.status, this.getResultDir());
 
-    // Write File
+  if (this.status == Task.Status.ABORTED) {
+    this.taskDef.abort = true;
+  } else {
+    if (this.resultFiles.length > 0) {
+      this.taskDef.success = true;
+    } else {
+      this.taskDef.success = false;
+    }
+  }
+  this.addResultFile(Task.ResultFileName.TASKDEF,
+                     JSON.stringify(this.taskDef,undefined, 4));
+
+  // Write file to disk.
+  var writeFile = (function(resultFile, fn) {
     var filePath = this.getResultFilePath(resultFile.filename);
     logger.info('Write %s to %s', resultFile.filename, filePath);
     fs.writeFile(filePath, resultFile.content, function(err) {
@@ -333,7 +354,8 @@ Task.prototype.processHAR = function(harJson) {
 Task.Status = Object.freeze({
   RUNNING: 'running',
   PENDING: 'pending',
-  FINISHED: 'finished'
+  FINISHED: 'finished',
+  ABORTED: 'aborted'
 });
 
 Task.ResultFileName = Object.freeze({

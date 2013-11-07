@@ -32,7 +32,7 @@ function parseFromMessages(messages) {
     'log': {
       'version': '1.2',
       'creator': {
-        'name': 'LiteWpt',
+        'name': 'WebTestServer',
         'version': '1.0'
       },
       'pages': [],
@@ -62,11 +62,9 @@ function parseFromMessages(messages) {
     page.processMessage(message);
   }
 
-  if (page.isOk()) {
-    var pageHAR = page.getHAR();
-    har.log.pages.push(pageHAR.info);
-    Array.prototype.push.apply(har.log.entries, pageHAR.entries);
-  }
+  var pageHAR = page.getHAR();
+  har.log.pages.push(pageHAR.info);
+  Array.prototype.push.apply(har.log.entries, pageHAR.entries);
   return har;
 }
 
