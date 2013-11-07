@@ -413,9 +413,8 @@ exports.injectWdAppLogging = injectWdAppLogging;
 exports.scheduleNoFault = function(app, description, f) {
   'use strict';
   return app.schedule(description, f).addErrback(function(e) {
-    logger.error(e);
     logger.error('Exception from "%s": %s', description, e);
-    logger.debug('%s', e.stack);
+    logger.info('%s', e.stack);
   });
 };
 

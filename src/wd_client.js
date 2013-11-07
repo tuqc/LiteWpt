@@ -32,7 +32,8 @@ function WebDriverClient(clientMgr, task, flags) {
   this.taskDef = task.taskDef;
   this.taskTimeout = task.timeout || DEFAULT_TASK_TIMEOUT;
 
-  this.runTempDir_ = '/tmp/';
+  this.runTempDir_ = '/tmp/' + task.id;
+  fs.mkdirSync(this.runTempDir_);
   this.app_ = webdriver.promise.controlFlow();
   process_utils.injectWdAppLogging('main app', this.app_);
 
@@ -190,7 +191,7 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
     logger.info('Screenshot number = %s', ipcMsg.screenshots.length);
     if (ipcMsg.screenshots && ipcMsg.screenshots.length > 0) {
       ipcMsg.screenshots.forEach(function(screenshot, index) {
-        logger.info('Adding screenshot %s: %s', index, screenshot.fileName);
+        logger.info('Adding screenshot %s: %s', index, screenshot.diskPath);
 
         process_utils.scheduleFunctionNoFault(this.app_,
             'Read ' + screenshot.diskPath,
@@ -206,7 +207,7 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
       }.bind(this));
     };
     this.scheduleNoFault_('Finishe task',
-        (this.clientMgr.finishTask(this.task)).bind(this));
+        this.clientMgr.finishTask.bind(this.clientMgr, this.task));
   }.bind(this));
 };
 

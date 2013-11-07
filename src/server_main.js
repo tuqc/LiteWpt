@@ -9,6 +9,7 @@ var har = require('har');
 var logger = require('logger');
 var moment = require('moment');
 var nopt = require('nopt');
+var path = require('path');
 var process_utils = require('process_utils');
 var system_commands = require('system_commands');
 var util = require('util');
@@ -431,7 +432,7 @@ WebServer.prototype.listTaskResult = function(req, res) {
   'use strict';
   var id = req.params.id;
 
-  var resultDir = task_manager.Task.deduceResultDir();
+  var resultDir = task_manager.Task.deduceResultDir(id);
 
   fs.readdir(resultDir, function(err, files) {
     if (err) {
