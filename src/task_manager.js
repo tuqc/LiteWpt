@@ -115,6 +115,25 @@ TaskManager.prototype.findTask = function(tid) {
 
 
 TaskManager.prototype.runNextTask = function() {
+  // Check stale tasks
+  var staleTasks = [];
+  for (var i = 0; i < this.runningQueue.length; i++) {
+    var runningTask = this.runningQueue[i];
+    var timeout = (runningTask.taskDef.timeout || DEFAULT_TEST_TIMEOUT) * 2;
+    if ((moment().unix() - runningTask.startTimestamp) * 1000 > timeout) {
+      staleTasks.push(runningTask);
+    }
+  };
+
+  // Clear stale task.
+  if (staleTasks) {
+    for (var i = 0; i < staleTasks.length; i++) {
+      logger.warn('Clear stale task %s', staleTasks[i].id);
+      this.finishedTasks(staleTasks[i]);
+    }
+  }
+
+  // Check concurrent limit.
   if (this.runningQueue.length >= this.maxConcurrent) {
     logger.debug('%s too many task running now: %s',
                  this.name, this.runningQueue.length);
@@ -129,12 +148,13 @@ TaskManager.prototype.runNextTask = function() {
     task.setStatus(Task.Status.RUNNING);
     var client = new this.clientClass(this, task, this.flags_);
 
-    //Abort test if timeout, 45 second.
+    //Abort test if timeout.
+    var timeout = task.taskDef.timeout || DEFAULT_TEST_TIMEOUT;
     global.setTimeout(function() {
       if (!client.task.isFinished()) {
         client.abort();
       }
-    }.bind(client), task.taskDef.timeout || DEFAULT_TEST_TIMEOUT);
+    }.bind(client), timeout);
 
     client.run();
   }
