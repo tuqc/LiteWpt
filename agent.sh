@@ -26,6 +26,9 @@ stop() {
   echo 'Kill all tcpdump...'
   killall tcpdump &>1 >/dev/null
   killall node &>1 >/dev/null
+  killall chromedriver-2.6 &>1 >/dev/null
+  killall chromium-browser &>1 >/dev/null
+  killall google-chrome &>1 >/dev/null
 }
 
 

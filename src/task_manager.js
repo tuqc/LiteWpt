@@ -21,6 +21,8 @@ var MAX_JOB_KEEP_DAYS = 5; // 5 days
 var DEFAULT_COCURRENT = 2;
 // Default directory of result file.
 var DEFAULT_BASE_RESULT_DIR = './result/';
+// Default max test time, will kill timeout test.
+var DEFAULT_TEST_TIMEOUT = 2 * 60 * 1000;  // 3 minutes.
 
 exports.DEFAULT_BASE_RESULT_DIR = DEFAULT_BASE_RESULT_DIR;
 
@@ -133,7 +135,7 @@ TaskManager.prototype.runNextTask = function() {
       if (!client.task.isFinished()) {
         client.abort();
       }
-    }.bind(client), 45000);
+    }.bind(client), task.taskDef.timeout || DEFAULT_TEST_TIMEOUT);
   }
 };
 

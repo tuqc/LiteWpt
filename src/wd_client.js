@@ -35,7 +35,9 @@ function WebDriverClient(clientMgr, task, flags) {
   this.taskTimeout = task.timeout || DEFAULT_TASK_TIMEOUT;
 
   this.runTempDir_ = path.join(DEFAULT_TEMP_DIR, task.id);
-  this.app_ = webdriver.promise.controlFlow();
+  //this.app_ = webdriver.promise.controlFlow();
+  var wd = new webdriver.WebDriver();
+  this.app_ = wd.controlFlow();
   process_utils.injectWdAppLogging('main app', this.app_);
 }
 
