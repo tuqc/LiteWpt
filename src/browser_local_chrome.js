@@ -52,9 +52,9 @@ function BrowserLocalChrome(app, args) {
   logger.info('BrowserLocalChrome(%s, %s)', args.chromedriver, args.chrome);
   this.chromedriver_ = args.chromedriver;  // Requires chromedriver 2.x.
   this.chrome_ = args.chrome;
-  this.serverPort_ = 4000 + Math.floor(Math.random() * 1000);
+  this.serverPort_ = 4000 + Math.floor(Math.random() * 2000);
   this.serverUrl_ = undefined;
-  this.devToolsPort_ = 2000 + Math.floor(Math.random() * 1000);
+  this.devToolsPort_ = 2000 + Math.floor(Math.random() * 2000);
   this.devToolsUrl_ = undefined;
 }
 util.inherits(BrowserLocalChrome, browser_base.BrowserBase);

@@ -184,8 +184,16 @@ WebDriverClient.prototype.startWdServer_ = function() {
  */
 WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
   'use strict';
-  logger.info('Schedule %s process done', this.task.id);
+  logger.info('Schedule %s process done, msg is %s',
+      this.task.id, ipcMsg ? 'ok' : 'none');
   this.scheduleNoFault_('Process job results', function() {
+    // Finish message directly if ipcMsg is none.
+    if (!ipcMsg) {
+      this.scheduleNoFault_('Finish task without ipc msg ' + this.task.id,
+          this.clientMgr.finishTask.bind(this.clientMgr, this.task));
+      return;
+    }
+
     if (ipcMsg.devToolsMessages) {
       var devMessage = JSON.stringify(ipcMsg.devToolsMessages);
       this.task.addResultFile(task_manager.Task.ResultFileName.DEVTOOLS_MSG,
@@ -195,7 +203,8 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
       this.task.addResultFile(task_manager.Task.ResultFileName.HAR,
                               JSON.stringify(harJson));
     }
-    logger.info('Screenshot %s n=%s', this.task.id, ipcMsg.screenshots.length);
+    logger.info('Screenshot %s n=%s', this.task.id,
+        ipcMsg.screenshots ? ipcMsg.screenshots.length : 0);
     if (ipcMsg.screenshots && ipcMsg.screenshots.length > 0) {
       //Reverse the screenshots, because latest is more important.
       ipcMsg.screenshots.reverse();
