@@ -127,8 +127,8 @@ WebDriverClient.prototype.finishRun_ = function() {
  */
 WebDriverClient.prototype.onUncaughtException_ = function(e) {
   'use strict';
-  console.log(e.stack);
-  logger.critical('Unhandled exception in the client: %s', e);
+  logger.critical('Unhandled exception of %s in client: %s', this.task.id, e);
+  logger.info(e.stack);
   this.task.setError(e);
 };
 
@@ -140,7 +140,7 @@ WebDriverClient.prototype.onUncaughtException_ = function(e) {
  */
 WebDriverClient.prototype.scheduleNoFault_ = function(description, f) {
   'use strict';
-  logger.info('Schedule no fault: %s', description);
+  logger.info('Schedule no fault for %s: %s', this.task.id, description);
   return process_utils.scheduleNoFault(this.app_, description, f);
 };
 
@@ -184,7 +184,7 @@ WebDriverClient.prototype.startWdServer_ = function() {
  */
 WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
   'use strict';
-  logger.info('Schedule process done.');
+  logger.info('Schedule %s process done', this.task.id);
   this.scheduleNoFault_('Process job results', function() {
     if (ipcMsg.devToolsMessages) {
       var devMessage = JSON.stringify(ipcMsg.devToolsMessages);
@@ -195,7 +195,7 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
       this.task.addResultFile(task_manager.Task.ResultFileName.HAR,
                               JSON.stringify(harJson));
     }
-    logger.info('Screenshot number = %s', ipcMsg.screenshots.length);
+    logger.info('Screenshot %s n=%s', this.task.id, ipcMsg.screenshots.length);
     if (ipcMsg.screenshots && ipcMsg.screenshots.length > 0) {
       //Reverse the screenshots, because latest is more important.
       ipcMsg.screenshots.reverse();
@@ -217,7 +217,7 @@ WebDriverClient.prototype.scheduleProcessDone_ = function(ipcMsg) {
             }.bind(this));
       }.bind(this));
     };
-    this.scheduleNoFault_('Finishe task',
+    this.scheduleNoFault_('Finish task ' + this.task.id,
         this.clientMgr.finishTask.bind(this.clientMgr, this.task));
   }.bind(this));
 };
@@ -234,14 +234,19 @@ WebDriverClient.prototype.abort = function() {
     return;
   }
   if (this.wdServer_) {
-    this.scheduleNoFault_('Remove message listener',
+    this.scheduleNoFault_('Remove message listener ' + this.task.id,
       this.wdServer_.removeAllListeners.bind(this.wdServer_, 'message'));
     this.scheduleNoFault_('Send IPC "abort"',
         this.wdServer_.send.bind(this.wdServer_, {cmd: 'abort'}));
   }
   this.task.setStatus(task_manager.Task.Status.ABORTED);
-  this.scheduleNoFault_('Finishe task',
-     this.clientMgr.finishTask.bind(this.clientMgr, this.task));
+
+  process_utils.scheduleFunctionNoFault(this.app_,
+    'Finish task ' + this.task.id,
+    this.clientMgr.finishTask.bind(this.clientMgr), this.task);
+
+  // this.scheduleNoFault_('Finish task ' + this.task.id,
+  //    this.clientMgr.finishTask.bind(this.clientMgr, this.task));
   this.scheduleCleanup_();
   // this.scheduleNoFault_('Timed out job finished',
   //     job.runFinished.bind(job, /*isRunFinished=*/true));
@@ -254,7 +259,7 @@ WebDriverClient.prototype.abort = function() {
  */
 WebDriverClient.prototype.scheduleCleanRunTempDir_ = function() {
   'use strict';
-  logger.info('Start clean run temp directory.');
+  logger.info('Start clean %s run temp directory.', this.task.id);
   process_utils.scheduleFunctionNoFault(this.app_, 'Tmp check',
       fs.exists, this.runTempDir_).then(function(exists) {
     if (exists) {

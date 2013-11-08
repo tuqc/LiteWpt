@@ -129,8 +129,10 @@ TaskManager.prototype.runNextTask = function() {
     client.run();
 
     //Abort test if timeout, 45 second.
-    global.setTimeout(function(){
-      client.abort();
+    global.setTimeout(function() {
+      if (!client.task.isFinished()) {
+        client.abort();
+      }
     }.bind(client), 45000);
   }
 };
@@ -150,12 +152,6 @@ TaskManager.prototype.finishTask = function(task) {
 
   if (task.taskDef.tcpdump) task.stopTCPDump();
   task.taskDef.endTimestamp = moment().unix();
-
-  // Write the task.json
-  // fs.writeFile(path, JSON.stringify(task.taskDef), (function(err) {
-  //   this.finishedQueue.push(task.taskDef);
-  // }).bind(this));
-
 
   task.setStatus(Task.Status.FINISHED);
 
@@ -234,8 +230,8 @@ Task.prototype.setError = function(error) {
 };
 
 Task.prototype.isFinished = function() {
-  return (this.status == Task.Status.FINISHED ||
-          this.status == Task.Status.ABORTED);
+  return (this.status === Task.Status.FINISHED ||
+          this.status === Task.Status.ABORTED);
 }
 
 Task.prototype.flushResult = function(callback) {
