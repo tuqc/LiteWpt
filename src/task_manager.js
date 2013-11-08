@@ -72,7 +72,7 @@ TaskManager.prototype.addTask = function(taskDef) {
     // with the same gid in the pending list.
     var found = false;
     for (var i = this.pendingQueue.length - 1; i >= 0; i--) {
-      var td = this.pendingQueue[i];
+      var td = this.pendingQueue[i].taskDef;
       if (td.gid && td.gid == taskDef.gid) {
         found = true;
         break;
@@ -128,7 +128,6 @@ TaskManager.prototype.runNextTask = function() {
     this.runningQueue.push(task);
     task.setStatus(Task.Status.RUNNING);
     var client = new this.clientClass(this, task, this.flags_);
-    client.run();
 
     //Abort test if timeout, 45 second.
     global.setTimeout(function() {
@@ -136,6 +135,8 @@ TaskManager.prototype.runNextTask = function() {
         client.abort();
       }
     }.bind(client), task.taskDef.timeout || DEFAULT_TEST_TIMEOUT);
+
+    client.run();
   }
 };
 

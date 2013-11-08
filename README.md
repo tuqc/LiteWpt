@@ -1,17 +1,25 @@
-LiteWpt
+WebTestServer
 =======
 
-Lite version of WebPageTest for unix* platform.
+WebTestServer is used for testing web page errors and latency at sever side on unix* platform.
 Derived from webpagetest nodejs agent.
+
+Features
+=======
+* HTTP API to submit test and get result files, including HAR data and screen shot.
+* Support WebDriverJS test script(use for click, fill forms, etc.).
+* Support test proxy server and proxy pac file.
+* Support multi tests at the same time.
+* Support Chrome and Phantomjs(Not implemented yet) test method.
 
 System Requirement
 =======
 nodejs: 0.8+
-Google Chrome: 26 ~ 28, ChromeDriver need update for 29+.
+Google Chrome: 26+, ChromeDriver 2.4+.
 
 Install Guide
 =======
-Make sure you have installed Google Chrome(including flash plugin if you want test pages contain flash), Xvfb.
+Make sure you have installed Google Chrome or Chromium(including flash plugin if you want test pages contain flash), Xvfb.
 The agent will use Xvfb to render the webpage by default.
 
 Run with root if you want use tcpdump feature.
