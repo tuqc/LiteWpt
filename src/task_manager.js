@@ -132,6 +132,7 @@ TaskManager.prototype.runNextTask = function() {
     this.runningQueue.push(task);
     task.setStatus(Task.Status.RUNNING);
     var client = new this.clientClass(this, task, this.flags_);
+    task.client = client;
 
     //Abort test if timeout.
     global.setTimeout(function() {
@@ -210,6 +211,7 @@ function Task(taskDef) {
   }
   this.id = this.taskDef.id;
   this.taskResult = {};
+  this.client = undefined;
   this.error = undefined;
   this.resultFiles = [];
   this.status = Task.Status.PENDING;
@@ -270,6 +272,7 @@ Task.prototype.flushResult = function(callback) {
   logger.info('Flush task %s(%s) result to %s',
               this.id, this.status, this.getResultDir());
 
+  this.client = undefined;
   if (this.status == Task.Status.ABORTED) {
     this.taskDef.success = false;
     this.taskDef.abort = true;
