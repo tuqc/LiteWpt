@@ -18,7 +18,7 @@ var MAX_TCP_DUMP_TIME_SECOND = 30;
 // Max days job data will be kept on disk.
 var MAX_JOB_KEEP_DAYS = 5; // 5 days
 // Max test running at the same time.
-var DEFAULT_COCURRENT = 2;
+var DEFAULT_COCURRENT = 3;
 // Default directory of result file.
 var DEFAULT_BASE_RESULT_DIR = './result/';
 // Default max test time, will kill timeout test.
@@ -57,8 +57,7 @@ TaskManager.prototype.run = function() {
   });
 
   // Clear stale task periodically.
-  global.setInterval(this.clearStaleTask.bind(this),
-                     DEFAULT_TEST_TIMEOUT_SECOND * 1000);
+  global.setInterval(this.clearStaleTask.bind(this), 1000);
 
   this.on('runnext', function() {
     this.runNextTask();
@@ -159,7 +158,7 @@ TaskManager.prototype.clearStaleTask = function() {
   var staleTasks = [];
   for (var i = 0; i < this.runningQueue.length; i++) {
     var runningTask = this.runningQueue[i];
-    var timeout = task.getTimeoutSecond() * 2;
+    var timeout = runningTask.getTimeoutSecond() * 1.5;
     if (moment().unix()-runningTask.taskDef.startTimestamp > timeout) {
       staleTasks.push(runningTask);
     }
@@ -169,7 +168,7 @@ TaskManager.prototype.clearStaleTask = function() {
   if (staleTasks) {
     for (var i = 0; i < staleTasks.length; i++) {
       logger.warn('Clear stale task %s', staleTasks[i].id);
-      this.finishTasks(staleTasks[i]);
+      this.finishTask(staleTasks[i]);
     }
   }
 };
