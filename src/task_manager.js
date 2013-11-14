@@ -22,7 +22,7 @@ var DEFAULT_COCURRENT = 3;
 // Default directory of result file.
 var DEFAULT_BASE_RESULT_DIR = './result/';
 // Default max test time, will kill timeout test.
-var DEFAULT_TEST_TIMEOUT_SECOND = 2 * 60;  // 2 minutes.
+var DEFAULT_TEST_TIMEOUT_SECOND = 3 * 60;  // 3 minutes.
 
 exports.DEFAULT_BASE_RESULT_DIR = DEFAULT_BASE_RESULT_DIR;
 

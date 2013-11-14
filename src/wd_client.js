@@ -18,7 +18,6 @@ var system_commands = require('system_commands');
 var util = require('util');
 
 
-var DEFAULT_TASK_TIMEOUT = 60000; // 60 seconds
 // Wait for 5 seconds before force-killing
 var WD_SERVER_EXIT_TIMEOUT = 5000;
 // Temp directory for temp data.
@@ -32,7 +31,6 @@ function WebDriverClient(clientMgr, task, flags) {
   this.flags = flags;
   this.task = task;
   this.taskDef = task.taskDef;
-  this.taskTimeout = task.timeout || DEFAULT_TASK_TIMEOUT;
 
   this.runTempDir_ = path.join(DEFAULT_TEMP_DIR, task.id);
   var wd = new webdriver.WebDriver();
@@ -75,7 +73,7 @@ WebDriverClient.prototype.run = function() {
         script: script,
         url: url,
         runTempDir: this.runTempDir_,
-        timeout: this.taskDef.timeout || DEFAULT_TASK_TIMEOUT
+        timeout: this.task.getTimeoutSecond() * 1000
       };
     if (this.taskDef.proxyPacUrl) {
       message.proxyPacUrl = this.taskDef.proxyPacUrl;
@@ -283,9 +281,6 @@ WebDriverClient.prototype.scheduleCleanRunTempDir_ = function() {
               'Delete ' + filePath, fs.unlink, filePath);
         }.bind(this));
       }.bind(this));
-    } else {
-      process_utils.scheduleFunction(this.app_, 'Tmp create',
-          fs.mkdir, this.runTempDir_);
     }
   }.bind(this));
   process_utils.scheduleFunction(this.app_, 'Remove dir ' + this. runTempDir_,
