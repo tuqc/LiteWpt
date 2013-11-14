@@ -14,7 +14,7 @@ var process_utils = require('process_utils');
 var system_commands = require('system_commands');
 
 // Sanity limit. Max tcp dump time to prevent too large dump file
-var MAX_TCP_DUMP_TIME = 30 * 1000;
+var MAX_TCP_DUMP_TIME_SECOND = 30;
 // Max days job data will be kept on disk.
 var MAX_JOB_KEEP_DAYS = 5; // 5 days
 // Max test running at the same time.
@@ -22,7 +22,7 @@ var DEFAULT_COCURRENT = 2;
 // Default directory of result file.
 var DEFAULT_BASE_RESULT_DIR = './result/';
 // Default max test time, will kill timeout test.
-var DEFAULT_TEST_TIMEOUT = 2 * 60 * 1000;  // 3 minutes.
+var DEFAULT_TEST_TIMEOUT_SECOND = 2 * 60;  // 2 minutes.
 
 exports.DEFAULT_BASE_RESULT_DIR = DEFAULT_BASE_RESULT_DIR;
 
@@ -55,6 +55,10 @@ TaskManager.prototype.run = function() {
       logger.warn(e.stack);
     }
   });
+
+  // Clear stale task periodically.
+  global.setInterval(this.clearStaleTask.bind(this),
+                     DEFAULT_TEST_TIMEOUT_SECOND * 1000);
 
   this.on('runnext', function() {
     this.runNextTask();
@@ -115,24 +119,6 @@ TaskManager.prototype.findTask = function(tid) {
 
 
 TaskManager.prototype.runNextTask = function() {
-  // Check stale tasks
-  var staleTasks = [];
-  for (var i = 0; i < this.runningQueue.length; i++) {
-    var runningTask = this.runningQueue[i];
-    var timeout = (runningTask.taskDef.timeout || DEFAULT_TEST_TIMEOUT) * 2;
-    if ((moment().unix() - runningTask.startTimestamp) * 1000 > timeout) {
-      staleTasks.push(runningTask);
-    }
-  };
-
-  // Clear stale task.
-  if (staleTasks) {
-    for (var i = 0; i < staleTasks.length; i++) {
-      logger.warn('Clear stale task %s', staleTasks[i].id);
-      this.finishedTasks(staleTasks[i]);
-    }
-  }
-
   // Check concurrent limit.
   if (this.runningQueue.length >= this.maxConcurrent) {
     logger.debug('%s too many task running now: %s',
@@ -149,12 +135,11 @@ TaskManager.prototype.runNextTask = function() {
     var client = new this.clientClass(this, task, this.flags_);
 
     //Abort test if timeout.
-    var timeout = task.taskDef.timeout || DEFAULT_TEST_TIMEOUT;
     global.setTimeout(function() {
       if (!client.task.isFinished()) {
         client.abort();
       }
-    }.bind(client), timeout);
+    }.bind(client), task.getTimeoutSecond() * 1000);
 
     client.run();
   }
@@ -162,6 +147,31 @@ TaskManager.prototype.runNextTask = function() {
 
 TaskManager.prototype.getBaseResultDir = function() {
   return DEFAULT_BASE_RESULT_DIR;
+};
+
+TaskManager.prototype.clearStaleTask = function() {
+  logger.info('Check stale tasks, runnings=%s', this.runningQueue.length);
+  if (this.runningQueue.length == 0) {
+    return;
+  }
+
+  // Check stale tasks
+  var staleTasks = [];
+  for (var i = 0; i < this.runningQueue.length; i++) {
+    var runningTask = this.runningQueue[i];
+    var timeout = task.getTimeoutSecond() * 2;
+    if (moment().unix()-runningTask.taskDef.startTimestamp > timeout) {
+      staleTasks.push(runningTask);
+    }
+  };
+
+  // Clear stale task.
+  if (staleTasks) {
+    for (var i = 0; i < staleTasks.length; i++) {
+      logger.warn('Clear stale task %s', staleTasks[i].id);
+      this.finishTasks(staleTasks[i]);
+    }
+  }
 };
 
 TaskManager.prototype.finishTask = function(task) {
@@ -324,6 +334,10 @@ Task.prototype.getResultFilePath = function(filename) {
   return path.join(this.getResultDir(), filename);
 };
 
+Task.prototype.getTimeoutSecond = function() {
+  return this.taskDef.timeout || DEFAULT_TEST_TIMEOUT_SECOND;
+};
+
 /**
  * Process HAR object after parsed.
  *
@@ -355,7 +369,7 @@ Task.prototype.startTCPDump = function() {
   // Stop the tcpdump when timeout.
   global.setTimeout((function() {
     this.stopTCPDump();
-  }).bind(this), MAX_TCP_DUMP_TIME);
+  }).bind(this), MAX_TCP_DUMP_TIME_SECOND * 1000);
 };
 
 /**
