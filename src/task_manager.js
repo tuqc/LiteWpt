@@ -57,7 +57,7 @@ TaskManager.prototype.run = function() {
   });
 
   // Clear stale task periodically.
-  global.setInterval(this.clearStaleTask.bind(this), 1000);
+  global.setInterval(this.clearStaleTask.bind(this), 30 * 1000);
 
   this.on('runnext', function() {
     this.runNextTask();

@@ -297,6 +297,8 @@ WebDriverClient.prototype.scheduleCleanup_ = function() {
   'use strict';
   logger.info('Start task %s clean up.', this.task.id);
   if (this.wdServer_) {
+    var pid = this.wdServer_.pid;
+    var tid = this.task.id;
     this.scheduleNoFault_('Remove message listener',
         this.wdServer_.removeAllListeners.bind(this.wdServer_, 'message'));
     process_utils.scheduleWait(this.app_, this.wdServer_, 'wd_server',
@@ -310,6 +312,20 @@ WebDriverClient.prototype.scheduleCleanup_ = function() {
         this.wdServer_ = undefined;
       }.bind(this));
     }.bind(this));
+
+    // Double check, kill it if process is live.
+    if (pid) {
+      global.setTimeout((function() {
+        isrunning(pid, function(err, live) {
+          logger.info('Check %s pid %s alive=%s', tid, pid, live);
+          if (live) {
+            logger.info('Pkill %s pid %s', tid,  pid);
+            child_process.spawn('pkill', ['-TERM', '-P', '' + pid]);
+            child_process.spawn('kill', ['-9', '' + pid]);
+          }
+        });
+      }).bind(this), 30 * 1000); //30 second
+    }
   }
   this.scheduleCleanRunTempDir_();
   // TODO kill dangling child processes
