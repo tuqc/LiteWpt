@@ -169,6 +169,9 @@ TaskManager.prototype.clearStaleTask = function() {
   if (staleTasks) {
     for (var i = 0; i < staleTasks.length; i++) {
       logger.warn('Clear stale task %s', staleTasks[i].id);
+      if (staleTasks[i].client) {
+        staleTasks[i].client.scheduleCleanup_();
+      }
       this.finishTask(staleTasks[i]);
     }
   }

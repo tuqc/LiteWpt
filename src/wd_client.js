@@ -294,7 +294,7 @@ WebDriverClient.prototype.scheduleCleanRunTempDir_ = function() {
  */
 WebDriverClient.prototype.scheduleCleanup_ = function() {
   'use strict';
-  logger.info('Start task clean up.');
+  logger.info('Start task %s clean up.', this.task.id);
   if (this.wdServer_) {
     this.scheduleNoFault_('Remove message listener',
         this.wdServer_.removeAllListeners.bind(this.wdServer_, 'message'));
