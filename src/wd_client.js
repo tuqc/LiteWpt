@@ -13,6 +13,7 @@ var moment = require('moment');
 var webdriver = require('selenium-webdriver');
 var path = require('path');
 var process_utils = require('process_utils');
+var ps_tree = require('ps-tree');
 var task_manager = require('task_manager');
 var system_commands = require('system_commands');
 var util = require('util');
@@ -319,9 +320,13 @@ WebDriverClient.prototype.scheduleCleanup_ = function() {
         isrunning(pid, function(err, live) {
           logger.info('Check %s pid %s alive=%s', tid, pid, live);
           if (live) {
-            logger.info('Pkill %s pid %s', tid,  pid);
-            child_process.spawn('pkill', ['-TERM', '-P', '' + pid]);
-            child_process.spawn('kill', ['-9', '' + pid]);
+            ps_tree(pid, function (err, children) {
+              child_process.spawn('kill', ['-9', ''+pid].concat(children.map(
+                function (p) {
+                  logger.info('kill sub process %s pid %s', tid,  p.PID);
+                  return p.PID;
+              })));
+            });
           }
         });
       }).bind(this), 30 * 1000); //30 second
