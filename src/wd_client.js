@@ -152,11 +152,12 @@ WebDriverClient.prototype.scheduleNoFault_ = function(description, f) {
  */
 WebDriverClient.prototype.startWdServer_ = function() {
   'use strict';
-  logger.info('Start wd server.');
   if (this.wdServer_) return;
   this.wdServer_ = child_process.fork('./src/wd_server.js',
       [], {env: process.env});
 
+  logger.info('Start wd_server for %s, pid: %s',
+              this.task.id, this.wdServer_.pid);
   this.wdServer_.on('message', function(ipcMsg) {
       logger.debug('got IPC: %s', ipcMsg.cmd);
       if ('done' === ipcMsg.cmd || 'error' === ipcMsg.cmd) {
