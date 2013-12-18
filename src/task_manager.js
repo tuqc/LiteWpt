@@ -4,6 +4,7 @@ var crypto = require('crypto');
 var common_utils = require('common_utils');
 var events = require('events');
 var fs = require('fs');
+var fs_extra = require('fs-extra');
 var isrunning = require('is-running');
 var logger = require('logger');
 var path = require('path');
@@ -55,6 +56,16 @@ TaskManager.prototype.run = function() {
       logger.warn(e.stack);
     }
   });
+
+    // Delete old jobs.
+  this.removeOutdateJobs();
+  // Run every 10 ~ 20 minutes.
+  // Use the random value because we don't want 2 task managers clear disk
+  // at the same time.
+  var interval = 10 * 60 * 1000 + Math.floor(Math.random() * 10 * 60 * 1000);
+  global.setInterval((function() {
+    this.removeOutdateJobs();
+  }).bind(this), interval);
 
   // Clear stale task periodically.
   global.setInterval(this.clearStaleTask.bind(this), 30 * 1000);
@@ -205,6 +216,92 @@ TaskManager.prototype.finishTask = function(task) {
     this.emit('runnext');
   }
 };
+
+/**
+ * Delete the old job, make sure the disk not too large.
+ */
+TaskManager.prototype.removeOutdateJobs = function() {
+  logger.info('Start to clean jobs outdate.');
+  var keepDays = MAX_JOB_KEEP_DAYS;
+  var dayLimit = moment().subtract('days', keepDays).format('YYYYMMDD');
+  var hourLimit = moment().subtract('days', keepDays).format('YYYYMMDDHH');
+  logger.info('Start delete jobs before %s', hourLimit);
+  var rootDir = this.getBaseResultDir();
+
+  /**
+   * Delete directory recursively, similar to rm -rf.
+   *
+   * @param {String} destDir target directory path.
+  */
+  var deleteDir = function(destDir) {
+    logger.info('Delete dir %s', destDir);
+    fs_extra.remove(destDir, function(err) {
+      if (err) {
+        logger.error('Delete dir %s error: %s', destDir, err);
+      } else {
+        logger.info('Delete dir %s success.', destDir);
+      }
+    });
+  };
+
+  /**
+   * Scan directory to decide to delete which derectories.
+   * @param {Array} dirNames directroies names relative to root
+   *        directory.
+   */
+  var processDir = function(dirNames) {
+    var dir = rootDir;
+    for (var i in dirNames) {
+      var name = dirNames[i];
+      var intVal = parseInt(name, 10);
+      // Check year dir name
+      if (i === 0 && !(intVal && intVal > 2012))
+        return;
+      // Check month dir name
+      if (i == 1 && !(intVal && intVal >= 1 && intVal <= 12))
+        return;
+      // Check day dir name
+      if (i == 2 && !(intVal && intVal >= 1 && intVal <= 31))
+        return;
+      // Check hour dir name
+      if (i == 3 && !(intVal && intVal >= 0 && intVal <= 24))
+        return;
+      dir = path.join(dir, dirNames[i]);
+    }
+    logger.info('Start to scan %s', dir);
+
+    var compareStr = dirNames.join('');
+    if (dirNames.length == 3) {
+      //Check if day dir outdate
+      if (compareStr < dayLimit) {
+        deleteDir(dir);
+        return;
+      } else if (compareStr > dayLimit) {
+        // Ignore day more than day limit
+        return;
+      }
+    } else if (dirNames.length == 4) {
+      if (compareStr < hourLimit) {
+        deleteDir(dir);
+      }
+      return;
+    }
+
+    fs.readdir(dir, function(err, filenames) {
+      if (err) return;
+      for (var i in filenames) {
+        var filename = filenames[i];
+        var subDirNames = dirNames.slice(0);
+        subDirNames.push(filename);
+        processDir(subDirNames);
+      }
+    });
+  };
+
+  // Do it.
+  processDir([]);
+};
+
 
 function Task(taskDef) {
   'use strict';
